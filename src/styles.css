@@ -106,3 +106,40 @@ body { background: var(--bg); color: var(--text); overscroll-behavior: none; }
 
 .estop-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
 .trigger { display: flex; flex-direction: column; gap: 2px; }
+
+/* Map */
+.map-view { position: absolute; inset: 0; overflow: hidden; }
+.map-view canvas { display: block; touch-action: none; }
+.map-tool-pan canvas { cursor: grab; }
+.map-tool-setPose canvas, .map-tool-goTo canvas, .map-tool-place canvas { cursor: crosshair; }
+.map-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+.map-zoom { position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
+.map-zoom .btn { width: 36px; height: 36px; font-size: 16px; }
+.map-toolbar {
+    position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px;
+    align-items: center; pointer-events: none;
+}
+.map-toolbar > * { pointer-events: auto; }
+.map-toolbar .btn { background: rgba(29, 33, 40, 0.92); }
+.map-toolbar .btn-selected { background: #3a4250; }
+.toolbar-sep { width: 8px; }
+.toggle {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600;
+    background: rgba(29, 33, 40, 0.92); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px;
+}
+.pending-bar {
+    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 12px;
+    align-items: center; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--accent);
+    border-radius: 12px; padding: 10px 14px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); max-width: calc(100% - 32px);
+}
+.pending-actions { display: flex; gap: 8px; }
+.text-input {
+    font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; min-width: 0;
+}
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.muted { color: var(--muted); }
+.warn-text { color: var(--warn); }
+.nav-status { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.btn-wide { width: 100%; padding: 12px; font-size: 15px; }
+.linklike { background: none; border: none; color: var(--muted); cursor: pointer; padding: 8px 0 0; font: inherit; font-size: 12px; text-decoration: underline; }
