@@ -15,7 +15,7 @@ const modeLevel = (mode: number | undefined): Level =>
             : mode === LOCALIZATION_MODE.SWITCHING ? "stale" : "error";
 
 /** Maps: record a new one with SLAM, save it, load a saved one for AMCL, delete. */
-export const FacilityPanel = ({ indoor, robotPose }: { indoor: IndoorNav; robotPose: Pose2D | null }) => {
+export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D | null }) => {
     const [name, setName] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -131,8 +131,25 @@ export const FacilityPanel = ({ indoor, robotPose }: { indoor: IndoorNav; robotP
                     );
                 })}
             </ul>
-            {mode === LOCALIZATION_MODE.LOCALIZATION && robotPose && (
-                <p className="hint">If the rover's outline does not match the walls, use “📍 Set pose” on the map.</p>
+            {mode === LOCALIZATION_MODE.LOCALIZATION && (
+                <>
+                    <h3 className="subhead">Lost?</h3>
+                    <p className="hint">
+                        If the rover's outline does not match the walls, use “📍 Set pose” on the map. If you don't
+                        know where it is (moved while off), let AMCL search the whole map:
+                    </p>
+                    <button
+                        className="btn btn-wide"
+                        disabled={busy}
+                        onClick={() => window.confirm(
+                            "Search the whole map for the rover? Its current position estimate is discarded. "
+                            + "Afterwards drive a few metres slowly in Manual and check the outline matches the walls - "
+                            + "in corridors or repeated bays it can pick a look-alike spot; use Set pose then.")
+                            && run(() => indoor.findMe())}
+                    >
+                        🔍 Find me
+                    </button>
+                </>
             )}
             {info && <p className="hint">{info}</p>}
             {error && <p className="hint error-text">{error}</p>}

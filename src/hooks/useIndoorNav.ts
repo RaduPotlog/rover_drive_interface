@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import { useApp } from "../AppContext";
 import type { Pose2D } from "../lib/geometry";
 import { nsName } from "../lib/namespace";
+import { findMe } from "../lib/relocalize";
 import type { LocalizationStateMsg, MapList, PlaceList, PlaceMsg, Result } from "../lib/rosTypes";
 import { useRos } from "../ros/RosProvider";
 import { useTopic } from "./useTopic";
@@ -41,6 +42,15 @@ export const useIndoorNav = () => {
         savePlace: (place: Omit<PlaceMsg, "map_name"> & { map_name?: string }) =>
             call<Result & { place: PlaceMsg }>("save_place", { place: { map_name: "", ...place } }),
         deletePlace: (id: string) => call("delete_place", { id }),
+        // AMCL's own std_srvs/Empty services, not the manager's.
+        findMe: async () => {
+            if (!ros || !connected) throw new Error("Not connected");
+            await findMe({
+                call: (service) => ros.callService(nsName(ns, service), {}, 5000),
+                sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            });
+            return { success: true, message: "Searching the whole map - drive a few metres slowly." };
+        },
     };
 };
 
