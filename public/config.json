@@ -1,0 +1,6 @@
+{
+  "namespace": "rover",
+  "robotName": "rover-a1",
+  "maxLinear": 1.0,
+  "maxAngular": 1.0
+}

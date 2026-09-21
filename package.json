@@ -1,0 +1,33 @@
+{
+  "name": "rover-drive-interface",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Browser drive interface for rover_a1 (Clearpath Boxer / IndoorNav style), talking ROS 2 through foxglove_bridge",
+  "type": "module",
+  "license": "Apache-2.0 AND LGPL-2.1-or-later",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@foxglove/ros2idl-parser": "^0.3.6",
+    "@foxglove/rosmsg": "^5.0.4",
+    "@foxglove/rosmsg2-serialization": "^3.0.2",
+    "@foxglove/ws-protocol": "^0.8.0",
+    "eventemitter3": "^5.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/react": "^18.3.13",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "5.9.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.1.4"
+  }
+}
