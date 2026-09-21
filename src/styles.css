@@ -143,3 +143,23 @@ body { background: var(--bg); color: var(--text); overscroll-behavior: none; }
 .nav-status { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .btn-wide { width: 100%; padding: 12px; font-size: 15px; }
 .linklike { background: none; border: none; color: var(--muted); cursor: pointer; padding: 8px 0 0; font: inherit; font-size: 12px; text-decoration: underline; }
+
+/* Places / facility */
+.subhead { margin-top: 16px !important; }
+.place-list, .workflow-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.workflow-list { counter-reset: step; }
+.place-list li, .workflow-list li {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 6px 8px; border-radius: 8px; background: var(--panel-2); border: 1px solid transparent;
+}
+.workflow-list li::before { counter-increment: step; content: counter(step, upper-alpha); font-weight: 700; color: var(--accent); width: 16px; }
+.place-highlighted { border-color: var(--accent) !important; }
+.place-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.place-name-input { flex: 1; padding: 4px 8px; }
+.place-actions { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
+.inline-form { display: flex; gap: 8px; margin-top: 10px; }
+.inline-form .text-input { flex: 1; }
+.small { font-size: 11px; }
+.rec { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--error); animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }

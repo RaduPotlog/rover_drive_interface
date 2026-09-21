@@ -61,3 +61,20 @@ export const initialPoseCovariance = (): number[] => {
     c[35] = 0.06853891945200942;
     return c;
 };
+
+// rover_indoor_nav_manager (rover_msgs)
+export interface PlaceMsg { id: string; name: string; map_name: string; x: number; y: number; theta: number }
+export interface PlaceList { map_name: string; places: PlaceMsg[] }
+export interface MapInfo { name: string; resolution: number; width: number; height: number; saved: Time }
+export interface MapList { maps: MapInfo[]; active_map: string }
+export interface LocalizationStateMsg { mode: number; map_name: string; message: string }
+
+export const LOCALIZATION_MODE = { UNAVAILABLE: 0, MAPPING: 1, LOCALIZATION: 2, SWITCHING: 3 } as const;
+export const LOCALIZATION_LABEL: Record<number, string> = {
+    0: "No localization",
+    1: "Mapping",
+    2: "Localized",
+    3: "Switching…",
+};
+
+export interface Result { success: boolean; message: string }

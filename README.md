@@ -27,11 +27,31 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
   - On-screen joystick, or a gamepad while **L1/LB** is held.
   - Speed presets 20/50/80/100 % of the configured maximum.
   - Software e-stop set/reset and safety-latch reset (`<ns>/hardware_interface/sw_*`).
+- **Map (Navigate).** Shows:
+  - the occupancy map;
+  - the lidar scan, the Nav 2 plan and an optional global costmap;
+  - the rover and its places.
+  Tools:
+  - **Set pose** (AMCL `initialpose`);
+  - **Go to**, which calls rover_mission_manager's `set_mission`;
+  - **Add place**;
+  - **Stop**.
+- **Places.** Named poses per map, stored on the rover by rover_indoor_nav_manager:
+  - **Go** to one;
+  - rename or delete;
+  - **Save here**;
+  - an **A → B → C workflow**, run as one mission.
+- **Facility.** **Start mapping** (slam_toolbox), **Save map**, and **Load** a saved map
+  (map_server + AMCL, switched at runtime) or delete one.
+  Needs `ROVER_LOCALIZATION_SOURCE=indoor` on the orchestrator.
 - **Top bar.** Shows:
   - safety (e-stop, latch, contactor, `motion_lock`);
   - worst `diagnostics_agg` level;
   - battery and charging;
-  - link latency (round trip through `/rosapi/get_time`).
+  - link latency (round trip through `/rosapi/get_time`);
+  - the localization mode.
+
+Tabs can be deep-linked: `#drive`, `#navigate`, `#facility`.
 
 ## Development
 
