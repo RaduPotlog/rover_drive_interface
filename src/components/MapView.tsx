@@ -1,9 +1,11 @@
+import { Map as MapIcon, Maximize2, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useApp } from "../AppContext";
 import { useSubscriptionRef } from "../hooks/useSubscriptionRef";
 import { normalizeAngle, type Pose2D, poseFromRos, transformPoint } from "../lib/geometry";
 import { nsFrame, nsName } from "../lib/namespace";
+import { buildMatchGrid, isNearWall, type MatchGrid, scanMatch, type ScanMatch } from "../lib/locQuality";
 import { gridToRgba, type OccupancyGrid } from "../lib/occupancyGrid";
 import type { LaserScan, Path, TFMessage } from "../lib/rosTypes";
 import { TfBuffer } from "../lib/tf";
@@ -52,6 +54,18 @@ const toLayer = (grid: OccupancyGrid, palette: "map" | "costmap"): GridLayer => 
     };
 };
 
+/** Valid scan endpoints transformed into the map frame. */
+const scanPointsInMap = (sc: LaserScan, toMap: Pose2D) => {
+    const out: { x: number; y: number }[] = [];
+    for (let i = 0; i < sc.ranges.length; i++) {
+        const r = sc.ranges[i];
+        if (!(r >= sc.range_min && r <= sc.range_max)) continue;
+        const a = sc.angle_min + i * sc.angle_increment;
+        out.push(transformPoint(toMap, { x: r * Math.cos(a), y: r * Math.sin(a) }));
+    }
+    return out;
+};
+
 export interface MapViewProps {
     tool: MapTool;
     /** Called when the operator finishes a click-and-drag with a pose tool. */
@@ -64,10 +78,14 @@ export interface MapViewProps {
     follow: boolean;
     onRobotPose?: (pose: Pose2D | null) => void;
     onMapFrame?: (frame: string | null) => void;
+    /** Colour scan points by whether they hit the map, and report the share (localization quality). */
+    scanMatchEnabled?: boolean;
+    onScanMatch?: (match: ScanMatch | null) => void;
 }
 
 export const MapView = ({
     tool, onPoseDrawn, pending, markers, onMarkerClick, showCostmap, follow, onRobotPose, onMapFrame,
+    scanMatchEnabled = false, onScanMatch,
 }: MapViewProps) => {
     const { config } = useApp();
     const ns = config.namespace;
@@ -80,6 +98,7 @@ export const MapView = ({
 
     const tf = useRef(new TfBuffer());
     const mapLayer = useRef<GridLayer | null>(null);
+    const matchGrid = useRef<MatchGrid | null>(null);
     const costLayer = useRef<GridLayer | null>(null);
     const scan = useRef<LaserScan | null>(null);
     const plan = useRef<Path | null>(null);
@@ -96,6 +115,7 @@ export const MapView = ({
     useSubscriptionRef<TFMessage>("/tf_static", "tf2_msgs/msg/TFMessage", (m) => { tf.current.add(m.transforms); markDirty() });
     useSubscriptionRef<OccupancyGrid>(nsName(ns, "map"), "nav_msgs/msg/OccupancyGrid", (m) => {
         mapLayer.current = toLayer(m, "map");
+        matchGrid.current = buildMatchGrid(m, 0.1);
         setHasMap(true);
         onMapFrame?.(m.header.frame_id);
         markDirty();
@@ -113,6 +133,18 @@ export const MapView = ({
         markDirty();
     }, [showCostmap]);
     useEffect(markDirty, [pending, markers, tool]);
+
+    // Scan-to-map match for the localization-quality indicator, twice a second.
+    useEffect(() => {
+        if (!scanMatchEnabled || !onScanMatch) return;
+        const id = setInterval(() => {
+            const sc = scan.current;
+            const mg = matchGrid.current;
+            const toMap = sc ? tf.current.lookup(mapFrame(), sc.header.frame_id) : null;
+            onScanMatch(sc && mg && toMap ? scanMatch(mg, scanPointsInMap(sc, toMap)) : null);
+        }, 500);
+        return () => clearInterval(id);
+    }, [scanMatchEnabled, onScanMatch]);
 
     // Robot pose to the parent, at a UI-friendly rate.
     const lastReported = useRef<string>("");
@@ -215,13 +247,11 @@ export const MapView = ({
         if (sc) {
             const toMap = tf.current.lookup(mapFrame(), sc.header.frame_id);
             if (toMap) {
-                ctx.fillStyle = "#ff5a5f";
-                const n = sc.ranges.length;
-                for (let i = 0; i < n; i++) {
-                    const r = sc.ranges[i];
-                    if (!(r >= sc.range_min && r <= sc.range_max)) continue;
-                    const a = sc.angle_min + i * sc.angle_increment;
-                    const w = transformPoint(toMap, { x: r * Math.cos(a), y: r * Math.sin(a) });
+                // Matched points (on a wall of the saved map) green, unmatched red - where the
+                // map and the world disagree is visible at a glance. Plain red without a map.
+                const mg = scanMatchEnabled ? matchGrid.current : null;
+                for (const w of scanPointsInMap(sc, toMap)) {
+                    ctx.fillStyle = mg ? (isNearWall(mg, w) ? "#22c55e" : "#ef4444") : "#ff5a5f";
                     const sp = worldToScreen(v, s, w);
                     ctx.fillRect(sp.x - 1.5, sp.y - 1.5, 3, 3);
                 }
@@ -261,7 +291,7 @@ export const MapView = ({
         const d = drag.current;
         if (d) drawArrow(ctx, d.pose, TOOL_COLOR[d.tool], 1.0);
         else if (pending) drawArrow(ctx, pending.pose, TOOL_COLOR[pending.tool], 1.0);
-    }, [markers, pending, ns]); // draw re-binds when the props it reads change
+    }, [markers, pending, ns, scanMatchEnabled]); // draw re-binds when the props it reads change
 
     // Animation loop: redraw only when something changed.
     useEffect(() => {
@@ -381,6 +411,11 @@ export const MapView = ({
         dirty.current = true;
     };
 
+    const zoomCentre = (factor: number) => {
+        view.current = zoomAt(view.current, size.current, { x: size.current.width / 2, y: size.current.height / 2 }, factor);
+        dirty.current = true;
+    };
+
     const fit = () => {
         fitted.current = false;
         dirty.current = true;
@@ -396,11 +431,22 @@ export const MapView = ({
                 onPointerCancel={onPointerUp}
                 onWheel={onWheel}
             />
-            {!hasMap && <div className="map-empty">Waiting for a map on {nsName(ns, "map")}…</div>}
-            <div className="map-zoom">
-                <button className="btn btn-small" onClick={() => { view.current = zoomAt(view.current, size.current, { x: size.current.width / 2, y: size.current.height / 2 }, 1.4); dirty.current = true }}>+</button>
-                <button className="btn btn-small" onClick={() => { view.current = zoomAt(view.current, size.current, { x: size.current.width / 2, y: size.current.height / 2 }, 1 / 1.4); dirty.current = true }}>−</button>
-                <button className="btn btn-small" onClick={fit} title="Fit map">⤢</button>
+            {!hasMap && (
+                <div className="map-empty">
+                    <MapIcon size={34} strokeWidth={1.5} />
+                    <div>Waiting for a map on {nsName(ns, "map")}…</div>
+                </div>
+            )}
+            {hasMap && scanMatchEnabled && (
+                <div className="map-legend" title="Lidar points on a wall of the saved map are green; red points hit free or unknown space">
+                    <span><span className="legend-dot" style={{ background: "#22c55e" }} />Scan matches map</span>
+                    <span><span className="legend-dot" style={{ background: "#ef4444" }} />No match</span>
+                </div>
+            )}
+            <div className="floating map-zoom">
+                <button className="tool-btn" title="Zoom in" onClick={() => zoomCentre(1.4)}><Plus size={18} /></button>
+                <button className="tool-btn" title="Zoom out" onClick={() => zoomCentre(1 / 1.4)}><Minus size={18} /></button>
+                <button className="tool-btn" title="Fit map" onClick={fit}><Maximize2 size={16} /></button>
             </div>
         </div>
     );

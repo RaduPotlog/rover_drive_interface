@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp, ListOrdered, MapPinned, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useApp } from "../AppContext";
@@ -63,8 +64,8 @@ export const PlacesPanel = ({ indoor, robotPose, onGo, highlighted, setHighlight
 
     if (!indoor.available) {
         return (
-            <section className="panel">
-                <h3>Places</h3>
+            <section className="card">
+                <div className="card-head"><h3 className="card-title"><MapPinned size={15} />Places</h3></div>
                 <p className="hint">
                     Places need rover_indoor_nav_manager (ROVER_LOCALIZATION_SOURCE=indoor on the orchestrator).
                 </p>
@@ -76,11 +77,14 @@ export const PlacesPanel = ({ indoor, robotPose, onGo, highlighted, setHighlight
     const canDrive = localized && driveMode === "neutral" && !busy;
 
     return (
-        <section className="panel">
-            <h3>Places {mapName && <span className="muted">· {mapName}</span>}</h3>
+        <section className="card">
+            <div className="card-head">
+                <h3 className="card-title"><MapPinned size={15} />Places</h3>
+                {mapName && <span className="chip chip-unknown">{mapName}</span>}
+            </div>
             {!localized && <p className="hint">Load a map in Facility to use places.</p>}
             {localized && indoor.places.length === 0 && (
-                <p className="hint">No places yet. Use “⭐ Add place” on the map, or save where the rover is now.</p>
+                <p className="hint">No places yet. Use “Add place” on the map, or save where the rover is now.</p>
             )}
             <ul className="place-list">
                 {indoor.places.map((p) => (
@@ -111,15 +115,15 @@ export const PlacesPanel = ({ indoor, robotPose, onGo, highlighted, setHighlight
                             <span className="place-name" title={`x ${p.x.toFixed(2)} · y ${p.y.toFixed(2)}`}>{p.name}</span>
                         )}
                         <span className="place-actions">
-                            <button className="btn btn-small btn-primary" disabled={!canDrive} onClick={() => run(() => onGo([p], p.name))}>Go</button>
-                            <button className="btn btn-small" title="Add to workflow" disabled={!localized} onClick={() => setWorkflow([...workflow, p.id])}>＋</button>
-                            <button className="btn btn-small" title="Rename" onClick={() => setEditing({ id: p.id, name: p.name })}>✎</button>
+                            <button className="btn btn-small btn-primary" disabled={!canDrive} onClick={() => run(() => onGo([p], p.name))}><Play size={13} />Go</button>
+                            <button className="btn btn-small" title="Add to workflow" disabled={!localized} onClick={() => setWorkflow([...workflow, p.id])}><Plus size={14} /></button>
+                            <button className="btn btn-small" title="Rename" onClick={() => setEditing({ id: p.id, name: p.name })}><Pencil size={13} /></button>
                             <button
                                 className="btn btn-small"
                                 title="Delete"
                                 onClick={() => window.confirm(`Delete place “${p.name}”?`) && run(() => indoor.deletePlace(p.id))}
                             >
-                                🗑
+                                <Trash2 size={13} />
                             </button>
                         </span>
                     </li>
@@ -149,18 +153,18 @@ export const PlacesPanel = ({ indoor, robotPose, onGo, highlighted, setHighlight
                 </div>
             )}
 
-            <h3 className="subhead">Workflow</h3>
+            <h3 className="card-title subhead"><ListOrdered size={15} />Workflow</h3>
             {steps.length === 0 ? (
-                <p className="hint">Add places with ＋ to visit them in order (A → B → C).</p>
+                <p className="hint">Add places with + to visit them in order (A → B → C).</p>
             ) : (
                 <ol className="workflow-list">
                     {steps.map((p, i) => (
                         <li key={`${p.id}-${i}`}>
                             <span className="place-name">{p.name}</span>
                             <span className="place-actions">
-                                <button className="btn btn-small" onClick={() => setWorkflow(moveStep(workflow, i, -1))} disabled={i === 0}>↑</button>
-                                <button className="btn btn-small" onClick={() => setWorkflow(moveStep(workflow, i, 1))} disabled={i === steps.length - 1}>↓</button>
-                                <button className="btn btn-small" onClick={() => setWorkflow(removeStep(workflow, i))}>✕</button>
+                                <button className="btn btn-small" onClick={() => setWorkflow(moveStep(workflow, i, -1))} disabled={i === 0}><ArrowUp size={13} /></button>
+                                <button className="btn btn-small" onClick={() => setWorkflow(moveStep(workflow, i, 1))} disabled={i === steps.length - 1}><ArrowDown size={13} /></button>
+                                <button className="btn btn-small" onClick={() => setWorkflow(removeStep(workflow, i))}><X size={13} /></button>
                             </span>
                         </li>
                     ))}
@@ -172,7 +176,7 @@ export const PlacesPanel = ({ indoor, robotPose, onGo, highlighted, setHighlight
                     disabled={!canDrive || steps.length === 0}
                     onClick={() => run(() => onGo(steps, workflowLabel(steps)))}
                 >
-                    ▶ Run workflow
+                    <Play size={15} />Run workflow
                 </button>
                 <button className="btn" disabled={workflow.length === 0} onClick={() => setWorkflow([])}>Clear</button>
             </div>

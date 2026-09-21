@@ -44,6 +44,12 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
 - **Facility.** **Start mapping** (slam_toolbox), **Save map**, and **Load** a saved map
   (map_server + AMCL, switched at runtime) or delete one.
   Needs `ROVER_LOCALIZATION_SOURCE=indoor` on the orchestrator.
+- **Localization quality.** A Boxer-style Good / Fair / Poor indicator in the top bar. It combines:
+  - the share of lidar points that land on a wall of the saved map (scan-to-map match);
+  - AMCL's reported uncertainty (`amcl_pose` covariance).
+  On the map, matched scan points are green and unmatched ones red, so you can see where the map
+  and the world disagree.
+  Thresholds: Good ≥ 70 % matched and σ ≤ 0.35 m; Poor < 40 % or σ > 1 m.
 - **Top bar.** Shows:
   - safety (e-stop, latch, contactor, `motion_lock`);
   - worst `diagnostics_agg` level;
@@ -75,6 +81,12 @@ src/
 └── components/   # TopBar, DrivePanel, Joystick, EStopPanel, …
 test/             # vitest
 ```
+
+## Branding
+
+The Mechatronics Academy logo (`public/logo.png`, from `icons/LogoMATransparentRound-80x80-1.png`)
+is used in the top bar and as the favicon. The accent colour `#fca800` was sampled from it.
+Icons come from [lucide-react](https://lucide.dev) (ISC).
 
 ## License
 

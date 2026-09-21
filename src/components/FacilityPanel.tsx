@@ -1,3 +1,4 @@
+import { Building2, Circle, Map as MapIcon, Save, Search, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 
 import type { IndoorNav } from "../hooks/useIndoorNav";
@@ -39,8 +40,8 @@ export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D
 
     if (!indoor.available) {
         return (
-            <section className="panel">
-                <h3>Facility</h3>
+            <section className="card">
+                <div className="card-head"><h3 className="card-title"><Building2 size={15} />Facility</h3></div>
                 <p className="hint">
                     Mapping and saved maps need rover_indoor_nav_manager: set ROVER_LOCALIZATION_SOURCE=indoor
                     (and ROVER_START_NAVIGATION=true) on the orchestrator.
@@ -53,8 +54,8 @@ export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D
     const maps = indoor.maps?.maps ?? [];
 
     return (
-        <section className="panel">
-            <h3>Facility</h3>
+        <section className="card">
+            <div className="card-head"><h3 className="card-title"><Building2 size={15} />Facility</h3></div>
             <div className="nav-status">
                 <StatusChip level={modeLevel(mode)} label={LOCALIZATION_LABEL[mode ?? 0]} />
                 {indoor.state?.map_name && <span className="muted">{indoor.state.map_name}</span>}
@@ -73,7 +74,7 @@ export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D
                             onChange={(e) => setName(e.target.value)}
                         />
                         <button className="btn btn-primary" disabled={!nameValid || busy} onClick={() => run(() => indoor.saveMap(name))}>
-                            Save map
+                            <Save size={15} />Save map
                         </button>
                     </div>
                     {name && !nameValid && <p className="hint error-text">Use 1–64 letters, digits, “_” or “-”.</p>}
@@ -85,11 +86,11 @@ export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D
                     onClick={() => window.confirm("Start a new map? Localization on the current map stops until you load a map again.")
                         && run(() => indoor.startMapping())}
                 >
-                    ⏺ Start mapping
+                    <Circle size={14} fill="currentColor" className="error-text" />Start mapping
                 </button>
             )}
 
-            <h3 className="subhead">Saved maps</h3>
+            <h3 className="card-title subhead"><MapIcon size={15} />Saved maps</h3>
             {maps.length === 0 && <p className="hint">No saved maps yet.</p>}
             <ul className="place-list">
                 {maps.map((m) => {
@@ -114,7 +115,7 @@ export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D
                                         title={justSaved ? "Switch to AMCL; the rover keeps its SLAM pose" : "Localize on this map at the last known pose (use Set pose if the rover was moved)"}
                                         onClick={() => run(() => indoor.loadMap(m.name))}
                                     >
-                                        Load
+                                        <Upload size={13} />Load
                                     </button>
                                 )}
                                 {!active && (
@@ -123,7 +124,7 @@ export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D
                                         disabled={busy}
                                         onClick={() => window.confirm(`Delete map “${m.name}” and its places?`) && run(() => indoor.deleteMap(m.name))}
                                     >
-                                        🗑
+                                        <Trash2 size={13} />
                                     </button>
                                 )}
                             </span>
@@ -133,9 +134,9 @@ export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D
             </ul>
             {mode === LOCALIZATION_MODE.LOCALIZATION && (
                 <>
-                    <h3 className="subhead">Lost?</h3>
+                    <h3 className="card-title subhead"><Search size={15} />Lost?</h3>
                     <p className="hint">
-                        If the rover's outline does not match the walls, use “📍 Set pose” on the map. If you don't
+                        If the rover's outline does not match the walls, use “Set pose” on the map. If you don't
                         know where it is (moved while off), let AMCL search the whole map:
                     </p>
                     <button
@@ -147,7 +148,7 @@ export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D
                             + "in corridors or repeated bays it can pick a look-alike spot; use Set pose then.")
                             && run(() => indoor.findMe())}
                     >
-                        🔍 Find me
+                        <Search size={15} />Find me
                     </button>
                 </>
             )}

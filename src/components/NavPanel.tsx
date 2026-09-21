@@ -1,3 +1,4 @@
+import { Navigation, Square } from "lucide-react";
 import { useState } from "react";
 
 import { useApp } from "../AppContext";
@@ -33,8 +34,8 @@ export const NavPanel = ({ mission, robotPose, onStop, stopError }: {
     const active = isActive(mission);
 
     return (
-        <section className="panel">
-            <h3>Navigate</h3>
+        <section className="card">
+            <div className="card-head"><h3 className="card-title"><Navigation size={15} />Navigate</h3></div>
             <div className="nav-status">
                 <StatusChip
                     level={missionLevel(mission)}
@@ -54,7 +55,7 @@ export const NavPanel = ({ mission, robotPose, onStop, stopError }: {
                 <p className="hint error-text">{mission.message}</p>
             )}
             <button className="btn btn-danger btn-wide" disabled={!active} onClick={onStop}>
-                ■ Stop
+                <Square size={16} fill="currentColor" />Stop
             </button>
             {stopError && <p className="hint error-text">{stopError}</p>}
             <p className="hint">

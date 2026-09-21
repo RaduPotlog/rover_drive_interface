@@ -1,10 +1,11 @@
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { StickInput } from "../lib/teleop";
 
 // A round on-screen thumbstick. Pointer events cover mouse, touch and pen; the stick
 // springs back to centre (and reports 0,0) on release, cancel or lost capture.
-export const Joystick = ({ disabled, onChange, size = 180 }: {
+export const Joystick = ({ disabled, onChange, size = 200 }: {
     disabled: boolean;
     onChange: (input: StickInput) => void;
     size?: number;
@@ -60,6 +61,10 @@ export const Joystick = ({ disabled, onChange, size = 180 }: {
             role="application"
             aria-label="Drive joystick"
         >
+            <span className="joystick-tick" style={{ top: 8 }}><ChevronUp size={18} /></span>
+            <span className="joystick-tick" style={{ bottom: 8 }}><ChevronDown size={18} /></span>
+            <span className="joystick-tick" style={{ left: 8 }}><ChevronLeft size={18} /></span>
+            <span className="joystick-tick" style={{ right: 8 }}><ChevronRight size={18} /></span>
             <div
                 className="joystick-knob"
                 style={{

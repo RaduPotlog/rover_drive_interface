@@ -1,3 +1,4 @@
+import { Gamepad2, Hand, Rabbit, Turtle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useApp } from "../AppContext";
@@ -94,44 +95,45 @@ export const DrivePanel = () => {
     }, [ros, session, publishing, config.namespace, config.maxLinear, config.maxAngular]);
 
     return (
-        <section className="panel drive-panel">
-            <div className="drive-mode">
-                <button
-                    className={`btn btn-mode ${manual ? "" : "btn-selected"}`}
-                    onClick={() => setDriveMode("neutral")}
-                >
-                    Neutral
+        <section className="card">
+            <div className="card-head">
+                <h3 className="card-title"><Gamepad2 size={15} />Manual drive</h3>
+            </div>
+            <div className="segmented" role="radiogroup" aria-label="Drive mode">
+                <button role="radio" aria-checked={!manual} className={!manual ? "seg-on" : ""}
+                    onClick={() => setDriveMode("neutral")}>
+                    <Hand size={16} />Neutral
                 </button>
-                <button
-                    className={`btn btn-mode ${manual ? "btn-selected btn-manual" : ""}`}
-                    disabled={!connected}
-                    onClick={() => setDriveMode("manual")}
-                >
-                    🕹 Manual
+                <button role="radio" aria-checked={manual} className={manual ? "seg-on seg-accent" : ""}
+                    disabled={!connected} onClick={() => setDriveMode("manual")}>
+                    <Gamepad2 size={16} />Manual
                 </button>
             </div>
 
-            <div className="speed-presets" role="radiogroup" aria-label="Speed">
-                <span className="preset-icon" aria-hidden>🐢</span>
-                {SPEED_PRESETS.map((p) => (
-                    <button
-                        key={p.id}
-                        role="radio"
-                        aria-checked={p.id === preset.id}
-                        className={`btn btn-preset ${p.id === preset.id ? "btn-selected" : ""}`}
-                        onClick={() => setPresetId(p.id)}
-                    >
-                        {p.label}
-                    </button>
-                ))}
-                <span className="preset-icon" aria-hidden>🐇</span>
+            <div className="speed-row" role="radiogroup" aria-label="Speed">
+                <Turtle size={18} className="speed-icon" aria-hidden />
+                <div className="segmented segmented-sm">
+                    {SPEED_PRESETS.map((p) => (
+                        <button key={p.id} role="radio" aria-checked={p.id === preset.id}
+                            className={p.id === preset.id ? "seg-on" : ""} onClick={() => setPresetId(p.id)}>
+                            {p.label}
+                        </button>
+                    ))}
+                </div>
+                <Rabbit size={18} className="speed-icon" aria-hidden />
             </div>
 
             <div className="joystick-wrap">
                 <Joystick disabled={!publishing} onChange={(s) => { stick.current = s }} />
-                <div className="twist-readout">
-                    <span>{twist.linear.toFixed(2)} m/s</span>
-                    <span>{twist.angular.toFixed(2)} rad/s</span>
+                <div className="readouts">
+                    <div className="readout">
+                        <div className="readout-label">Linear</div>
+                        <div className="readout-value">{twist.linear.toFixed(2)}<span className="readout-unit">m/s</span></div>
+                    </div>
+                    <div className="readout">
+                        <div className="readout-label">Angular</div>
+                        <div className="readout-value">{twist.angular.toFixed(2)}<span className="readout-unit">rad/s</span></div>
+                    </div>
                 </div>
             </div>
 

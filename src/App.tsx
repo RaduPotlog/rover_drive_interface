@@ -1,3 +1,4 @@
+import { Building2, Gamepad2, Navigation } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { AppContext, type DriveMode, useApp } from "./AppContext";
@@ -10,13 +11,14 @@ import { type MapTool, MapView } from "./components/MapView";
 import { isActive, NavPanel } from "./components/NavPanel";
 import { PendingBar } from "./components/PendingBar";
 import { PlacesPanel } from "./components/PlacesPanel";
-import { StatusChip } from "./components/StatusChip";
-import { TopBar } from "./components/TopBar";
+import { type LocalizationStatus, TopBar } from "./components/TopBar";
 import { useIndoorNav } from "./hooks/useIndoorNav";
+import { useLocalizationQuality } from "./hooks/useLocalizationQuality";
 import { useNavigation } from "./hooks/useNavigation";
 import type { Pose2D } from "./lib/geometry";
 import { nsFrame } from "./lib/namespace";
 import { LOCALIZATION_LABEL, LOCALIZATION_MODE, type PlaceMsg } from "./lib/rosTypes";
+import type { Level } from "./lib/status";
 import { RosProvider, useRos } from "./ros/RosProvider";
 
 type Tab = "drive" | "navigate" | "facility";
@@ -63,6 +65,22 @@ const Workspace = () => {
         disabledTools.place = disabledTools.place ?? why;
         disabledTools.setPose = disabledTools.setPose ?? why;
     }
+
+    // Quality only means something while AMCL localizes on a saved map; in the fixed
+    // localization_source:=amcl mode (no indoor manager) it is shown as well.
+    const localized = indoor.available ? locMode === LOCALIZATION_MODE.LOCALIZATION : true;
+    const { quality, onScanMatch } = useLocalizationQuality(localized && connected);
+    const modeLevel: Level = locMode === LOCALIZATION_MODE.LOCALIZATION ? "ok"
+        : locMode === LOCALIZATION_MODE.MAPPING ? "warn"
+            : locMode === LOCALIZATION_MODE.SWITCHING ? "stale" : "error";
+    const localization: LocalizationStatus = {
+        mode: indoor.available
+            ? `${LOCALIZATION_LABEL[locMode ?? 0]}${indoor.state?.map_name ? ` · ${indoor.state.map_name}` : ""}`
+            : quality ? "AMCL" : null,
+        modeLevel,
+        modeDetail: indoor.state?.message,
+        quality: localized ? quality : null,
+    };
 
     const markers = indoor.places.map((p) => ({
         id: p.id,
@@ -125,16 +143,7 @@ const Workspace = () => {
     return (
         <AppContext.Provider value={{ config, driveMode, setDriveMode: guardedSetDriveMode }}>
             <div className="app">
-                <TopBar>
-                    {indoor.available && (
-                        <StatusChip
-                            level={locMode === LOCALIZATION_MODE.LOCALIZATION ? "ok" : locMode === LOCALIZATION_MODE.MAPPING ? "warn" : locMode === LOCALIZATION_MODE.SWITCHING ? "stale" : "error"}
-                            label={`${LOCALIZATION_LABEL[locMode ?? 0]}${indoor.state?.map_name ? ` · ${indoor.state.map_name}` : ""}`}
-                            title={indoor.state?.message}
-                            icon="🗺"
-                        />
-                    )}
-                </TopBar>
+                <TopBar localization={localization} />
                 <main className="workspace">
                     <div className="map-area">
                         <MapView
@@ -147,6 +156,8 @@ const Workspace = () => {
                             follow={follow}
                             onRobotPose={setRobotPose}
                             onMapFrame={setMapFrame}
+                            scanMatchEnabled={localized}
+                            onScanMatch={onScanMatch}
                         />
                         <MapToolbar
                             tool={tool}
@@ -169,30 +180,39 @@ const Workspace = () => {
                         )}
                     </div>
                     <aside className="sidebar">
-                        <nav className="tabs">
-                            <button className={`tab ${tab === "drive" ? "tab-active" : ""}`} onClick={() => setTab("drive")}>Drive</button>
-                            <button className={`tab ${tab === "navigate" ? "tab-active" : ""}`} onClick={() => setTab("navigate")}>Navigate</button>
-                            <button className={`tab ${tab === "facility" ? "tab-active" : ""}`} onClick={() => setTab("facility")}>Facility</button>
+                        <nav className="tabs" role="tablist">
+                            <button role="tab" aria-selected={tab === "drive"} className={`tab ${tab === "drive" ? "tab-active" : ""}`} onClick={() => setTab("drive")}>
+                                <Gamepad2 size={16} />Drive
+                            </button>
+                            <button role="tab" aria-selected={tab === "navigate"} className={`tab ${tab === "navigate" ? "tab-active" : ""}`} onClick={() => setTab("navigate")}>
+                                <Navigation size={16} />Navigate
+                            </button>
+                            <button role="tab" aria-selected={tab === "facility"} className={`tab ${tab === "facility" ? "tab-active" : ""}`} onClick={() => setTab("facility")}>
+                                <Building2 size={16} />Facility
+                            </button>
                         </nav>
-                        {tab === "drive" && (
-                            <>
-                                <DrivePanel />
-                                <EStopPanel />
-                            </>
-                        )}
-                        {tab === "navigate" && (
-                            <>
-                                <NavPanel mission={nav.mission} robotPose={robotPose} onStop={stop} stopError={stopError} />
-                                <PlacesPanel
-                                    indoor={indoor}
-                                    robotPose={robotPose}
-                                    onGo={goToPlaces}
-                                    highlighted={highlighted}
-                                    setHighlighted={setHighlighted}
-                                />
-                            </>
-                        )}
-                        {tab === "facility" && <FacilityPanel indoor={indoor} robotPose={robotPose} />}
+                        <div className="tabs-rule" />
+                        <div className="sidebar-body">
+                            {tab === "drive" && (
+                                <>
+                                    <DrivePanel />
+                                    <EStopPanel />
+                                </>
+                            )}
+                            {tab === "navigate" && (
+                                <>
+                                    <NavPanel mission={nav.mission} robotPose={robotPose} onStop={stop} stopError={stopError} />
+                                    <PlacesPanel
+                                        indoor={indoor}
+                                        robotPose={robotPose}
+                                        onGo={goToPlaces}
+                                        highlighted={highlighted}
+                                        setHighlighted={setHighlighted}
+                                    />
+                                </>
+                            )}
+                            {tab === "facility" && <FacilityPanel indoor={indoor} robotPose={robotPose} />}
+                        </div>
                     </aside>
                 </main>
             </div>
