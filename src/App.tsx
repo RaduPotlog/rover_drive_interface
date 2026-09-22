@@ -75,7 +75,10 @@ const Workspace = () => {
     // Quality only means something while AMCL localizes on a saved map; in the fixed
     // localization_source:=amcl mode (no indoor manager) it is shown as well.
     const localized = indoor.available ? locMode === LOCALIZATION_MODE.LOCALIZATION : true;
-    const { quality, onScanMatch } = useLocalizationQuality(localized && connected);
+    // While mapping, judge the scan against the map slam_toolbox is building (as OTTO does).
+    const mapping = indoor.available && locMode === LOCALIZATION_MODE.MAPPING;
+    const judged = localized || mapping;
+    const { quality, onScanMatch } = useLocalizationQuality(judged && connected, mapping);
     const modeLevel: Level = locMode === LOCALIZATION_MODE.LOCALIZATION ? "ok"
         : locMode === LOCALIZATION_MODE.MAPPING ? "warn"
             : locMode === LOCALIZATION_MODE.SWITCHING ? "stale" : "error";
@@ -85,7 +88,7 @@ const Workspace = () => {
             : quality ? "AMCL" : null,
         modeLevel,
         modeDetail: indoor.state?.message,
-        quality: localized ? quality : null,
+        quality: judged ? quality : null,
     };
 
     const markers = indoor.places.map((p) => ({
@@ -165,7 +168,8 @@ const Workspace = () => {
                                 onRobotPose={setRobotPose}
                                 onMapFrame={setMapFrame}
                                 onMapInfo={setMapInfo}
-                                scanMatchEnabled={localized}
+                                scanMatchEnabled={judged}
+                                mapping={mapping}
                                 onScanMatch={onScanMatch}
                             />
                             <MapToolbar

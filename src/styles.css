@@ -291,6 +291,8 @@ svg { flex-shrink: 0; }
 }
 .legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 .legend-dot-outline { box-shadow: 0 0 0 1px var(--border-strong); }
+.legend-sep { width: 1px; align-self: stretch; background: var(--border-strong); }
+.map-legend { flex-wrap: wrap; max-width: calc(100% - 300px); }
 .pending-bar {
     position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 12px;
     align-items: center; flex-wrap: wrap; max-width: calc(100% - 32px);

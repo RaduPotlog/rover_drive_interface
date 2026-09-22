@@ -5,7 +5,15 @@ import { useApp } from "../AppContext";
 import { useSubscriptionRef } from "../hooks/useSubscriptionRef";
 import { normalizeAngle, type Pose2D, poseFromRos, transformPoint } from "../lib/geometry";
 import { nsFrame, nsName } from "../lib/namespace";
-import { buildMatchGrid, isNearWall, type MatchGrid, scanMatch, type ScanMatch } from "../lib/locQuality";
+import {
+    buildMatchGrid,
+    classifyPoint,
+    isNearWall,
+    type MatchGrid,
+    type PointMatch,
+    scanMatch,
+    type ScanMatch,
+} from "../lib/locQuality";
 import { gridToRgba, MAP_LEGEND_COLORS, type MapSummary, type OccupancyGrid, summarizeMap } from "../lib/occupancyGrid";
 import type { LaserScan, Path, TFMessage } from "../lib/rosTypes";
 import { TfBuffer } from "../lib/tf";
@@ -31,6 +39,7 @@ interface GridLayer {
 
 const FOOTPRINT = 0.98; // m, square (rover_nav_params.yaml)
 const SCAN_COLOR = "#38bdf8"; // live lidar when there is no saved map to match against
+const POINT_COLOR: Record<PointMatch, string> = { wall: "#22c55e", new: SCAN_COLOR, conflict: "#ef4444" };
 const TOOL_COLOR: Record<MapTool, string> = {
     pan: "#f5b400",
     setPose: "#3aa0ff",
@@ -83,12 +92,14 @@ export interface MapViewProps {
     onMapInfo?: (summary: MapSummary) => void;
     /** Colour scan points by whether they hit the map, and report the share (localization quality). */
     scanMatchEnabled?: boolean;
+    /** Matching against the map SLAM is building: unmapped area is "new", not a miss. */
+    mapping?: boolean;
     onScanMatch?: (match: ScanMatch | null) => void;
 }
 
 export const MapView = ({
     tool, onPoseDrawn, pending, markers, onMarkerClick, showCostmap, follow, onRobotPose, onMapFrame,
-    onMapInfo, scanMatchEnabled = false, onScanMatch,
+    onMapInfo, scanMatchEnabled = false, mapping = false, onScanMatch,
 }: MapViewProps) => {
     const { config } = useApp();
     const ns = config.namespace;
@@ -145,10 +156,10 @@ export const MapView = ({
             const sc = scan.current;
             const mg = matchGrid.current;
             const toMap = sc ? tf.current.lookup(mapFrame(), sc.header.frame_id) : null;
-            onScanMatch(sc && mg && toMap ? scanMatch(mg, scanPointsInMap(sc, toMap)) : null);
+            onScanMatch(sc && mg && toMap ? scanMatch(mg, scanPointsInMap(sc, toMap), { ignoreUnknown: mapping }) : null);
         }, 500);
         return () => clearInterval(id);
-    }, [scanMatchEnabled, onScanMatch]);
+    }, [scanMatchEnabled, mapping, onScanMatch]);
 
     // Robot pose to the parent, at a UI-friendly rate.
     const lastReported = useRef<string>("");
@@ -251,12 +262,14 @@ export const MapView = ({
         if (sc) {
             const toMap = tf.current.lookup(mapFrame(), sc.header.frame_id);
             if (toMap) {
-                // Matched points (on a wall of the saved map) green, unmatched red - where the
-                // map and the world disagree is visible at a glance. While mapping there is no
-                // saved map to disagree with, so the scan is a neutral cyan, not an alarm red.
+                // Matched points (on a wall of the map) green, unmatched red - where the map and
+                // the world disagree is visible at a glance. While mapping, points in unmapped
+                // area are new ground, so they are a neutral cyan rather than an alarm red.
                 const mg = scanMatchEnabled ? matchGrid.current : null;
                 for (const w of scanPointsInMap(sc, toMap)) {
-                    ctx.fillStyle = mg ? (isNearWall(mg, w) ? "#22c55e" : "#ef4444") : SCAN_COLOR;
+                    ctx.fillStyle = !mg ? SCAN_COLOR
+                        : mapping ? POINT_COLOR[classifyPoint(mg, w)]
+                            : isNearWall(mg, w) ? POINT_COLOR.wall : POINT_COLOR.conflict;
                     const sp = worldToScreen(v, s, w);
                     ctx.fillRect(sp.x - 1.5, sp.y - 1.5, 3, 3);
                 }
@@ -296,7 +309,7 @@ export const MapView = ({
         const d = drag.current;
         if (d) drawArrow(ctx, d.pose, TOOL_COLOR[d.tool], 1.0);
         else if (pending) drawArrow(ctx, pending.pose, TOOL_COLOR[pending.tool], 1.0);
-    }, [markers, pending, ns, scanMatchEnabled]); // draw re-binds when the props it reads change
+    }, [markers, pending, ns, scanMatchEnabled, mapping]); // draw re-binds when the props it reads change
 
     // Animation loop: redraw only when something changed.
     useEffect(() => {
@@ -442,7 +455,18 @@ export const MapView = ({
                     <div>Waiting for a map on {nsName(ns, "map")}…</div>
                 </div>
             )}
-            {hasMap && scanMatchEnabled && (
+            {hasMap && scanMatchEnabled && mapping && (
+                <div className="map-legend" title="Lidar points on a mapped wall are green, in unmapped area cyan, and on mapped free space red: there the scan and the map disagree">
+                    <span><span className="legend-dot" style={{ background: MAP_LEGEND_COLORS.free }} />Free</span>
+                    <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.wall }} />Wall</span>
+                    <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.unknown }} />Unexplored</span>
+                    <span className="legend-sep" />
+                    <span><span className="legend-dot" style={{ background: POINT_COLOR.wall }} />Match</span>
+                    <span><span className="legend-dot" style={{ background: POINT_COLOR.new }} />New</span>
+                    <span><span className="legend-dot" style={{ background: POINT_COLOR.conflict }} />Conflict</span>
+                </div>
+            )}
+            {hasMap && scanMatchEnabled && !mapping && (
                 <div className="map-legend" title="Lidar points on a wall of the saved map are green; red points hit free or unknown space">
                     <span><span className="legend-dot" style={{ background: "#22c55e" }} />Scan matches map</span>
                     <span><span className="legend-dot" style={{ background: "#ef4444" }} />No match</span>

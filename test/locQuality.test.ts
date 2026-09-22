@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
     buildMatchGrid,
+    classifyPoint,
     classifyQuality,
     isNearWall,
     scanMatch,
@@ -80,5 +81,46 @@ describe("quality classification", () => {
         expect(sigmaFromCovariance(cov)).toBeCloseTo(0.3, 9);
         cov[0] = Number.NaN;
         expect(sigmaFromCovariance(cov)).toBeNull();
+    });
+});
+
+describe("matching while mapping", () => {
+    // The fixture's left half (x < 0) still unknown, as on a map SLAM is still building.
+    const partial = () => {
+        const g = grid();
+        for (let y = 0; y < 20; y++) for (let x = 0; x < 10; x++) g.data[y * 20 + x] = -1;
+        return g;
+    };
+
+    it("tells wall, new (unknown or off-map) and conflict (mapped free space) apart", () => {
+        const mg = buildMatchGrid(partial(), 0.05);
+        expect(classifyPoint(mg, { x: 0.2, y: 0 })).toBe("wall");
+        expect(classifyPoint(mg, { x: -0.3, y: 0 })).toBe("new");
+        expect(classifyPoint(mg, { x: 5, y: 5 })).toBe("new");
+        expect(classifyPoint(mg, { x: 0.05, y: 0 })).toBe("conflict");
+    });
+
+    it("leaves unmapped points out, so new ground does not lower the score", () => {
+        const mg = buildMatchGrid(partial(), 0.05);
+        const pts = [{ x: 0.2, y: 0 }, { x: 0.2, y: 0.1 }, { x: 0.05, y: 0 }, { x: -0.3, y: 0 }, { x: 9, y: 9 }];
+        expect(scanMatch(mg, pts, { ignoreUnknown: true })).toEqual({ ratio: 2 / 3, count: 3 });
+        expect(scanMatch(mg, pts).count).toBe(5); // localization: every point counts
+    });
+
+    it("reads an empty map as not enough points, never 0%", () => {
+        const g = grid();
+        g.data.fill(-1);
+        const m = scanMatch(buildMatchGrid(g), Array.from({ length: 100 }, (_, i) => ({ x: i / 100, y: 0 })), { ignoreUnknown: true });
+        expect(m.count).toBe(0);
+        const q = classifyQuality({ match: m, sigmaXY: null, mapping: true });
+        expect(q.percent).toBeNull();
+        expect(q.label).toBe("—");
+    });
+
+    it("gives mapping-specific advice when the score is poor", () => {
+        const q = classifyQuality({ match: { ratio: 0.2, count: 100 }, sigmaXY: null, mapping: true });
+        expect(q.level).toBe("poor");
+        expect(q.detail).toContain("drifting");
+        expect(q.detail).not.toContain("Set pose");
     });
 });
