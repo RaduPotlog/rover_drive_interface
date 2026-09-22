@@ -30,6 +30,8 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
     facility map can be recorded without the RC transmitter.
   - Manual driving keeps publishing whichever tab is open; the loop lives above the tabs.
   - Speed presets 20/50/80/100 % of the configured maximum.
+  - Expo curve per axis (`expoLinear` 0.3, `expoAngular` 0.5): small stick moves give much
+    less speed (30 % turn stick → 16 %), full stick is still full speed. 0 = linear.
   - Rim-speed limit, as in rover_crsf_teleop. When |v| + |w| · track/2 would exceed
     `maxRimSpeed` (1.7 m/s), v and w are scaled together, so the rover drives the commanded arc
     more slowly instead of the outer wheel being clipped into a tighter turn.

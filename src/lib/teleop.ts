@@ -22,6 +22,9 @@ export interface Limits {
     maxRimSpeed?: number;
     /** Effective track width, m (wheel_separation * wheel_separation_multiplier). */
     trackWidth?: number;
+    /** Expo per axis, 0 (linear) .. 1 (softest around centre); unset = 0. See applyExpo. */
+    expoLinear?: number;
+    expoAngular?: number;
 }
 
 export interface StickInput {
@@ -45,6 +48,17 @@ export const applyDeadzone = (v: number, deadzone: number): number => {
     const a = Math.abs(v);
     if (a <= deadzone) return 0;
     return Math.sign(v) * clamp((a - deadzone) / (1 - deadzone), 0, 1);
+};
+
+/**
+ * RC-style expo: (1 - e)·v + e·v³. Small deflections give much less speed, full deflection is
+ * still exactly ±1, so fine control improves without losing top speed. Odd, so the sign is
+ * kept; e = 0 is linear. On the RC transmitter this lives in the radio (EdgeTX), not in
+ * rover_crsf_teleop, so the web UI applies its own.
+ */
+export const applyExpo = (v: number, expo: number): number => {
+    const e = clamp(Number.isFinite(expo) ? expo : 0, 0, 1);
+    return (1 - e) * v + e * v * v * v;
 };
 
 /**
@@ -80,11 +94,11 @@ export const stickToTwist = (
     limits: Limits,
     deadzone = 0.08,
 ): Twist2D => {
-    const x = applyDeadzone(clamp(stick.x, -1, 1), deadzone);
-    const y = applyDeadzone(clamp(stick.y, -1, 1), deadzone);
+    const x = applyExpo(applyDeadzone(clamp(stick.x, -1, 1), deadzone), limits.expoAngular ?? 0);
+    const y = applyExpo(applyDeadzone(clamp(stick.y, -1, 1), deadzone), limits.expoLinear ?? 0);
     const f = clamp(fraction, 0, 1);
     const twist = {
-        linear: y * limits.maxLinear * f,
+        linear: y * limits.maxLinear * f || 0,
         angular: -x * limits.maxAngular * f || 0, // no -0 on the wire
     };
     return limitRimSpeed(twist, limits.maxRimSpeed ?? 0, (limits.trackWidth ?? 0) / 2);

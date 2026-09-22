@@ -101,6 +101,8 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
             maxAngular: config.maxAngular,
             maxRimSpeed: config.maxRimSpeed,
             trackWidth: config.trackWidth,
+            expoLinear: config.expoLinear,
+            expoAngular: config.expoAngular,
         };
 
         const tick = () => {
@@ -119,7 +121,7 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
             topic.unadvertise();
         };
     }, [ros, session, publishing, config.namespace, config.maxLinear, config.maxAngular,
-        config.maxRimSpeed, config.trackWidth]);
+        config.maxRimSpeed, config.trackWidth, config.expoLinear, config.expoAngular]);
 
     const setStick = useCallback((s: StickInput) => { stick.current = s }, []);
 

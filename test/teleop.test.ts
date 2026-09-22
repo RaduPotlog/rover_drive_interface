@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { padToStick } from "../src/lib/gamepad";
-import { applyDeadzone, limitRimSpeed, mayPublish, stickToTwist, twistStamped } from "../src/lib/teleop";
+import { applyDeadzone, applyExpo, limitRimSpeed, mayPublish, stickToTwist, twistStamped } from "../src/lib/teleop";
 
 const limits = { maxLinear: 1.0, maxAngular: 1.0 };
 
@@ -104,5 +104,45 @@ describe("limitRimSpeed", () => {
         // Today's defaults (1.0 m/s, 1.0 rad/s, 1.0204 m) never reach 1.7 m/s: unchanged.
         const defaults = { maxLinear: 1.0, maxAngular: 1.0, maxRimSpeed: 1.7, trackWidth: 1.0204 };
         expect(stickToTwist({ x: 1, y: 1 }, 1.0, defaults, 0)).toEqual({ linear: 1.0, angular: -1.0 });
+    });
+});
+
+describe("applyExpo", () => {
+    it("is linear at 0 and keeps full deflection at ±1 for any expo", () => {
+        expect(applyExpo(0.37, 0)).toBeCloseTo(0.37, 12);
+        for (const e of [0, 0.3, 0.5, 1]) {
+            expect(applyExpo(1, e)).toBeCloseTo(1, 12);
+            expect(applyExpo(-1, e)).toBeCloseTo(-1, 12);
+        }
+    });
+
+    it("softens small deflections: 30 % stick at 0.5 expo is 16 %", () => {
+        expect(applyExpo(0.3, 0.5)).toBeCloseTo(0.1635, 12);
+    });
+
+    it("is odd and monotonic", () => {
+        let prev = -Infinity;
+        for (let v = -1; v <= 1.0001; v += 0.05) {
+            const out = applyExpo(v, 0.7);
+            expect(applyExpo(-v, 0.7)).toBeCloseTo(-out, 12);
+            expect(out).toBeGreaterThan(prev);
+            prev = out;
+        }
+    });
+
+    it("clamps expo to 0..1", () => {
+        expect(applyExpo(0.5, 2)).toBeCloseTo(applyExpo(0.5, 1), 12);
+        expect(applyExpo(0.5, -1)).toBeCloseTo(0.5, 12);
+        expect(applyExpo(0.5, Number.NaN)).toBeCloseTo(0.5, 12);
+    });
+
+    it("is applied by stickToTwist: full stick unchanged, half stick softer, zero stays 0", () => {
+        const soft = { maxLinear: 1, maxAngular: 1, expoLinear: 0.3, expoAngular: 0.5 };
+        expect(stickToTwist({ x: 1, y: 1 }, 1, soft, 0)).toEqual({ linear: 1, angular: -1 });
+        const half = stickToTwist({ x: 0.5, y: 0.5 }, 1, soft, 0);
+        expect(half.linear).toBeCloseTo(0.3875, 12); // 0.7·0.5 + 0.3·0.125
+        expect(half.angular).toBeCloseTo(-0.3125, 12); // 0.5·0.5 + 0.5·0.125
+        const zero = stickToTwist({ x: 0, y: 0 }, 1, soft);
+        expect(Object.is(zero.linear, 0) && Object.is(zero.angular, 0)).toBe(true);
     });
 });

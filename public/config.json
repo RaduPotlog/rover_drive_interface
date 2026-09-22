@@ -4,5 +4,7 @@
   "maxLinear": 1.0,
   "maxAngular": 1.0,
   "maxRimSpeed": 1.7,
-  "trackWidth": 1.0204
+  "trackWidth": 1.0204,
+  "expoLinear": 0.3,
+  "expoAngular": 0.5
 }

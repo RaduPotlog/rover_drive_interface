@@ -11,6 +11,9 @@ export interface AppConfig {
     maxRimSpeed: number;
     /** rover_crsf_teleop's effective_track_width [m]. */
     trackWidth: number;
+    /** Stick expo 0 (linear) .. 1 per axis; turning gets more, it is the twitchy one. */
+    expoLinear: number;
+    expoAngular: number;
 }
 
 const DEFAULTS: AppConfig = {
@@ -20,12 +23,16 @@ const DEFAULTS: AppConfig = {
     maxAngular: 1.0,
     maxRimSpeed: 1.7,
     trackWidth: 1.0204,
+    expoLinear: 0.3,
+    expoAngular: 0.5,
 };
 
 const positive = (v: unknown, fallback: number) =>
     typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fallback;
 const nonNegative = (v: unknown, fallback: number) =>
     typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : fallback;
+const unit = (v: unknown, fallback: number) =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1 ? v : fallback;
 
 export const parseConfig = (raw: Record<string, unknown>): AppConfig => ({
     namespace: typeof raw.namespace === "string" ? sanitizeNamespace(raw.namespace) : DEFAULTS.namespace,
@@ -34,6 +41,8 @@ export const parseConfig = (raw: Record<string, unknown>): AppConfig => ({
     maxAngular: positive(raw.maxAngular, DEFAULTS.maxAngular),
     maxRimSpeed: nonNegative(raw.maxRimSpeed, DEFAULTS.maxRimSpeed),
     trackWidth: positive(raw.trackWidth, DEFAULTS.trackWidth),
+    expoLinear: unit(raw.expoLinear, DEFAULTS.expoLinear),
+    expoAngular: unit(raw.expoAngular, DEFAULTS.expoAngular),
 });
 
 export const loadConfig = async (): Promise<AppConfig> => {
