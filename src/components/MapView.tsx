@@ -6,7 +6,7 @@ import { useSubscriptionRef } from "../hooks/useSubscriptionRef";
 import { normalizeAngle, type Pose2D, poseFromRos, transformPoint } from "../lib/geometry";
 import { nsFrame, nsName } from "../lib/namespace";
 import { buildMatchGrid, isNearWall, type MatchGrid, scanMatch, type ScanMatch } from "../lib/locQuality";
-import { gridToRgba, MAP_LEGEND_COLORS, type OccupancyGrid } from "../lib/occupancyGrid";
+import { gridToRgba, MAP_LEGEND_COLORS, type MapSummary, type OccupancyGrid, summarizeMap } from "../lib/occupancyGrid";
 import type { LaserScan, Path, TFMessage } from "../lib/rosTypes";
 import { TfBuffer } from "../lib/tf";
 import { fitBounds, panBy, screenToWorld, type Size, type View, worldToScreen, zoomAt } from "../lib/view";
@@ -79,6 +79,8 @@ export interface MapViewProps {
     follow: boolean;
     onRobotPose?: (pose: Pose2D | null) => void;
     onMapFrame?: (frame: string | null) => void;
+    /** Size and coverage of every map message (slam_toolbox grows it while mapping). */
+    onMapInfo?: (summary: MapSummary) => void;
     /** Colour scan points by whether they hit the map, and report the share (localization quality). */
     scanMatchEnabled?: boolean;
     onScanMatch?: (match: ScanMatch | null) => void;
@@ -86,7 +88,7 @@ export interface MapViewProps {
 
 export const MapView = ({
     tool, onPoseDrawn, pending, markers, onMarkerClick, showCostmap, follow, onRobotPose, onMapFrame,
-    scanMatchEnabled = false, onScanMatch,
+    onMapInfo, scanMatchEnabled = false, onScanMatch,
 }: MapViewProps) => {
     const { config } = useApp();
     const ns = config.namespace;
@@ -119,6 +121,7 @@ export const MapView = ({
         matchGrid.current = buildMatchGrid(m, 0.1);
         setHasMap(true);
         onMapFrame?.(m.header.frame_id);
+        onMapInfo?.(summarizeMap(m));
         markDirty();
     });
     useSubscriptionRef<OccupancyGrid>(

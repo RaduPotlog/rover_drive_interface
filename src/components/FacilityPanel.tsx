@@ -1,8 +1,9 @@
-import { Building2, Circle, Map as MapIcon, Save, Search, Trash2, Upload } from "lucide-react";
+import { Building2, Circle, Map as MapIcon, Ruler, Save, Search, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 
 import type { IndoorNav } from "../hooks/useIndoorNav";
 import type { Pose2D } from "../lib/geometry";
+import { formatMapSummary, type MapSummary } from "../lib/occupancyGrid";
 import { LOCALIZATION_LABEL, LOCALIZATION_MODE } from "../lib/rosTypes";
 import type { Level } from "../lib/status";
 import { MAP_NAME } from "../lib/workflow";
@@ -16,7 +17,12 @@ const modeLevel = (mode: number | undefined): Level =>
             : mode === LOCALIZATION_MODE.SWITCHING ? "stale" : "error";
 
 /** Maps: record a new one with SLAM, save it, load a saved one for AMCL, delete. */
-export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D | null }) => {
+export const FacilityPanel = ({ indoor, mapInfo }: {
+    indoor: IndoorNav;
+    robotPose: Pose2D | null;
+    /** The map currently shown: while mapping, slam_toolbox grows it as scans are added. */
+    mapInfo: MapSummary | null;
+}) => {
     const [name, setName] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -61,6 +67,13 @@ export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D
                 {indoor.state?.map_name && <span className="muted">{indoor.state.map_name}</span>}
             </div>
             {indoor.state?.message && <p className="hint">{indoor.state.message}</p>}
+            {mapInfo && (mapping || mode === LOCALIZATION_MODE.LOCALIZATION) && (
+                <p className="hint map-size" title={mapping
+                    ? "slam_toolbox fits the map to the lidar hits so far; it grows once the rover moves 0.2 m or turns 0.1 rad"
+                    : "Size of the loaded map"}>
+                    <Ruler size={14} />Map {formatMapSummary(mapInfo)}
+                </p>
+            )}
 
             {mapping ? (
                 <>

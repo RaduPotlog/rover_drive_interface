@@ -18,6 +18,7 @@ import { useLocalizationQuality } from "./hooks/useLocalizationQuality";
 import { useNavigation } from "./hooks/useNavigation";
 import { TeleopProvider } from "./hooks/useTeleop";
 import type { Pose2D } from "./lib/geometry";
+import { type MapSummary, sameMapSummary } from "./lib/occupancyGrid";
 import { nsFrame } from "./lib/namespace";
 import { LOCALIZATION_LABEL, LOCALIZATION_MODE, type PlaceMsg } from "./lib/rosTypes";
 import type { Level } from "./lib/status";
@@ -51,6 +52,9 @@ const Workspace = () => {
     const [showCostmap, setShowCostmap] = useState(false);
     const [robotPose, setRobotPose] = useState<Pose2D | null>(null);
     const [mapFrame, setMapFrame] = useState<string | null>(null);
+    const [mapInfo, setMapInfoState] = useState<MapSummary | null>(null);
+    // The map arrives every second; only re-render when what the panel shows changes.
+    const setMapInfo = useCallback((s: MapSummary) => setMapInfoState((prev) => (sameMapSummary(prev, s) ? prev : s)), []);
     const frame = mapFrame ?? nsFrame(config.namespace, "map");
 
     const disabledTools: Partial<Record<MapTool, string>> = {};
@@ -160,6 +164,7 @@ const Workspace = () => {
                                 follow={follow}
                                 onRobotPose={setRobotPose}
                                 onMapFrame={setMapFrame}
+                                onMapInfo={setMapInfo}
                                 scanMatchEnabled={localized}
                                 onScanMatch={onScanMatch}
                             />
@@ -216,7 +221,7 @@ const Workspace = () => {
                                         />
                                     </>
                                 )}
-                                {tab === "facility" && <FacilityPanel indoor={indoor} robotPose={robotPose} />}
+                                {tab === "facility" && <FacilityPanel indoor={indoor} robotPose={robotPose} mapInfo={mapInfo} />}
                             </div>
                         </aside>
                     </main>

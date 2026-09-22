@@ -66,3 +66,28 @@ export const gridToRgba = (grid: Pick<OccupancyGrid, "info" | "data">, palette: 
     }
     return out;
 };
+
+export interface MapSummary {
+    /** Metres along x and y (width × resolution, height × resolution). */
+    widthM: number;
+    heightM: number;
+    resolution: number;
+    /** Share of cells that are known (free or occupied), 0..1. */
+    explored: number;
+}
+
+/** Size and coverage of a map, for the Facility panel. */
+export const summarizeMap = (grid: OccupancyGrid): MapSummary => {
+    const { width, height, resolution } = grid.info;
+    let known = 0;
+    for (const v of grid.data) if (v >= 0) known++;
+    const cells = width * height;
+    return { widthM: width * resolution, heightM: height * resolution, resolution, explored: cells ? known / cells : 0 };
+};
+
+export const sameMapSummary = (a: MapSummary | null, b: MapSummary | null): boolean =>
+    a === b || (a !== null && b !== null && a.widthM === b.widthM && a.heightM === b.heightM
+        && a.resolution === b.resolution && Math.round(a.explored * 100) === Math.round(b.explored * 100));
+
+export const formatMapSummary = (s: MapSummary): string =>
+    `${s.widthM.toFixed(1)} × ${s.heightM.toFixed(1)} m · ${Math.round(s.explored * 100)}% explored · ${s.resolution.toFixed(2)} m/cell`;
