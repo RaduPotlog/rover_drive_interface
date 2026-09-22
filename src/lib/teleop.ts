@@ -18,6 +18,10 @@ export const SPEED_PRESETS: SpeedPreset[] = [
 export interface Limits {
     maxLinear: number; // m/s
     maxAngular: number; // rad/s
+    /** Outer-wheel rim speed budget, m/s; 0 or unset disables (see limitRimSpeed). */
+    maxRimSpeed?: number;
+    /** Effective track width, m (wheel_separation * wheel_separation_multiplier). */
+    trackWidth?: number;
 }
 
 export interface StickInput {
@@ -44,6 +48,29 @@ export const applyDeadzone = (v: number, deadzone: number): number => {
 };
 
 /**
+ * Keeps the outer wheel of a skid-steer base within a rim-speed budget - a port of
+ * rover_crsf_teleop's limitRimSpeed, so the web joystick and the RC transmitter behave alike.
+ *
+ * diff_drive limits linear and angular independently, so full forward plus full turn asks the
+ * outer wheel for |v| + |w| * halfTrack, which can exceed what the wheel joints allow. When the
+ * joint limiter then clips only the outer wheel, the rover turns tighter than the stick asked
+ * for. Scaling v and w by one common factor keeps the curvature w/v: the arc is the one
+ * commanded, just driven slower.
+ *
+ * - a command within the budget is returned unchanged;
+ * - otherwise v and w are scaled so the rim speed equals the budget;
+ * - zero stays exactly zero;
+ * - maxRimSpeed <= 0 or halfTrack <= 0 disables the limit.
+ */
+export const limitRimSpeed = (twist: Twist2D, maxRimSpeed: number, halfTrack: number): Twist2D => {
+    if (!(maxRimSpeed > 0) || !(halfTrack > 0)) return twist;
+    const rim = Math.abs(twist.linear) + Math.abs(twist.angular) * halfTrack;
+    if (rim <= maxRimSpeed) return twist;
+    const scale = maxRimSpeed / rim;
+    return { linear: twist.linear * scale || 0, angular: twist.angular * scale || 0 };
+};
+
+/**
  * Stick deflection to a twist. Forward is +linear; pushing right turns right, which is
  * -angular in ROS (REP-103, z up).
  */
@@ -56,10 +83,11 @@ export const stickToTwist = (
     const x = applyDeadzone(clamp(stick.x, -1, 1), deadzone);
     const y = applyDeadzone(clamp(stick.y, -1, 1), deadzone);
     const f = clamp(fraction, 0, 1);
-    return {
+    const twist = {
         linear: y * limits.maxLinear * f,
         angular: -x * limits.maxAngular * f || 0, // no -0 on the wire
     };
+    return limitRimSpeed(twist, limits.maxRimSpeed ?? 0, (limits.trackWidth ?? 0) / 2);
 };
 
 /**

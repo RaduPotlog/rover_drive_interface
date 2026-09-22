@@ -30,6 +30,9 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
     facility map can be recorded without the RC transmitter.
   - Manual driving keeps publishing whichever tab is open; the loop lives above the tabs.
   - Speed presets 20/50/80/100 % of the configured maximum.
+  - Rim-speed limit, as in rover_crsf_teleop. When |v| + |w| · track/2 would exceed
+    `maxRimSpeed` (1.7 m/s), v and w are scaled together, so the rover drives the commanded arc
+    more slowly instead of the outer wheel being clipped into a tighter turn.
   - Software e-stop set/reset and safety-latch reset (`<ns>/hardware_interface/sw_*`).
 - **Map (Navigate).** Shows:
   - the occupancy map;

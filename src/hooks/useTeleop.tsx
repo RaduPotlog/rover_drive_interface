@@ -96,7 +96,12 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
             messageType: "geometry_msgs/msg/TwistStamped",
         });
         const frame = nsFrame(config.namespace, "base_link");
-        const limits = { maxLinear: config.maxLinear, maxAngular: config.maxAngular };
+        const limits = {
+            maxLinear: config.maxLinear,
+            maxAngular: config.maxAngular,
+            maxRimSpeed: config.maxRimSpeed,
+            trackWidth: config.trackWidth,
+        };
 
         const tick = () => {
             const padStick = padToStick(firstPad());
@@ -113,7 +118,8 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
             topic.publish(twistStamped(ZERO_TWIST, frame));
             topic.unadvertise();
         };
-    }, [ros, session, publishing, config.namespace, config.maxLinear, config.maxAngular]);
+    }, [ros, session, publishing, config.namespace, config.maxLinear, config.maxAngular,
+        config.maxRimSpeed, config.trackWidth]);
 
     const setStick = useCallback((s: StickInput) => { stick.current = s }, []);
 
