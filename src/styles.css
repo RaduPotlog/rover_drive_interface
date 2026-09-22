@@ -288,6 +288,7 @@ svg { flex-shrink: 0; }
     background: rgba(21, 26, 34, 0.9); border: 1px solid var(--border); box-shadow: var(--shadow);
 }
 .legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.legend-dot-outline { box-shadow: 0 0 0 1px var(--border-strong); }
 .pending-bar {
     position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 12px;
     align-items: center; flex-wrap: wrap; max-width: calc(100% - 32px);

@@ -23,6 +23,10 @@ const UNKNOWN_MAP: Rgba = [58, 63, 71, 255];
 const FREE_MAP: Rgba = [236, 238, 241, 255];
 const OCCUPIED_MAP: Rgba = [24, 26, 30, 255];
 
+const css = ([r, g, b]: Rgba) => `rgb(${r}, ${g}, ${b})`;
+/** The map palette as CSS colours, for the legend. */
+export const MAP_LEGEND_COLORS = { free: css(FREE_MAP), wall: css(OCCUPIED_MAP), unknown: css(UNKNOWN_MAP) };
+
 export const mapColor = (value: number): Rgba => {
     if (value < 0) return UNKNOWN_MAP;
     if (value >= 65) return OCCUPIED_MAP;

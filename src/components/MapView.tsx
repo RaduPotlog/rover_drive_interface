@@ -6,7 +6,7 @@ import { useSubscriptionRef } from "../hooks/useSubscriptionRef";
 import { normalizeAngle, type Pose2D, poseFromRos, transformPoint } from "../lib/geometry";
 import { nsFrame, nsName } from "../lib/namespace";
 import { buildMatchGrid, isNearWall, type MatchGrid, scanMatch, type ScanMatch } from "../lib/locQuality";
-import { gridToRgba, type OccupancyGrid } from "../lib/occupancyGrid";
+import { gridToRgba, MAP_LEGEND_COLORS, type OccupancyGrid } from "../lib/occupancyGrid";
 import type { LaserScan, Path, TFMessage } from "../lib/rosTypes";
 import { TfBuffer } from "../lib/tf";
 import { fitBounds, panBy, screenToWorld, type Size, type View, worldToScreen, zoomAt } from "../lib/view";
@@ -30,6 +30,7 @@ interface GridLayer {
 }
 
 const FOOTPRINT = 0.98; // m, square (rover_nav_params.yaml)
+const SCAN_COLOR = "#38bdf8"; // live lidar when there is no saved map to match against
 const TOOL_COLOR: Record<MapTool, string> = {
     pan: "#f5b400",
     setPose: "#3aa0ff",
@@ -248,10 +249,11 @@ export const MapView = ({
             const toMap = tf.current.lookup(mapFrame(), sc.header.frame_id);
             if (toMap) {
                 // Matched points (on a wall of the saved map) green, unmatched red - where the
-                // map and the world disagree is visible at a glance. Plain red without a map.
+                // map and the world disagree is visible at a glance. While mapping there is no
+                // saved map to disagree with, so the scan is a neutral cyan, not an alarm red.
                 const mg = scanMatchEnabled ? matchGrid.current : null;
                 for (const w of scanPointsInMap(sc, toMap)) {
-                    ctx.fillStyle = mg ? (isNearWall(mg, w) ? "#22c55e" : "#ef4444") : "#ff5a5f";
+                    ctx.fillStyle = mg ? (isNearWall(mg, w) ? "#22c55e" : "#ef4444") : SCAN_COLOR;
                     const sp = worldToScreen(v, s, w);
                     ctx.fillRect(sp.x - 1.5, sp.y - 1.5, 3, 3);
                 }
@@ -441,6 +443,14 @@ export const MapView = ({
                 <div className="map-legend" title="Lidar points on a wall of the saved map are green; red points hit free or unknown space">
                     <span><span className="legend-dot" style={{ background: "#22c55e" }} />Scan matches map</span>
                     <span><span className="legend-dot" style={{ background: "#ef4444" }} />No match</span>
+                </div>
+            )}
+            {hasMap && !scanMatchEnabled && (
+                <div className="map-legend" title="Gray is map area the lidar has not seen yet; it fills in as the rover drives">
+                    <span><span className="legend-dot" style={{ background: MAP_LEGEND_COLORS.free }} />Free</span>
+                    <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.wall }} />Wall</span>
+                    <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.unknown }} />Unexplored</span>
+                    <span><span className="legend-dot" style={{ background: SCAN_COLOR }} />Lidar</span>
                 </div>
             )}
             <div className="floating map-zoom">
