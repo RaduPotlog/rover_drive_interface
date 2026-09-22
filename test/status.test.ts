@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseConfig } from "../src/config";
 import { nsFrame, nsName, sanitizeNamespace } from "../src/lib/namespace";
-import { batteryPercent, summarizeSafety, worstDiagnosticLevel } from "../src/lib/status";
+import { batteryPercent, needsRecovery, safetyBadge, summarizeSafety, worstDiagnosticLevel } from "../src/lib/status";
 
 const okStatus = {
     hw_e_stop_user_button: false,
@@ -53,5 +53,17 @@ describe("namespace and config", () => {
         expect(c.namespace).toBe("/rover");
         expect(c.maxLinear).toBe(1.0);
         expect(c.robotName).toBe("rover");
+    });
+});
+
+describe("safety recovery", () => {
+    it("asks for a reset on warn and error, not when ready or unknown", () => {
+        const s = (level: "ok" | "warn" | "error" | "unknown" | "stale", label = "x") => ({ level, label, detail: "" });
+        expect(needsRecovery(s("ok"))).toBe(false);
+        expect(needsRecovery(s("unknown"))).toBe(false);
+        expect(needsRecovery(s("warn"))).toBe(true);
+        expect(needsRecovery(s("error"))).toBe(true);
+        expect(safetyBadge(s("error", "E-STOP (SW)"))).toBe("E-STOP");
+        expect(safetyBadge(s("warn", "Latched"))).toBe("LATCHED");
     });
 });

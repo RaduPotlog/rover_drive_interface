@@ -16,6 +16,7 @@ import { type LocalizationStatus, TopBar } from "./components/TopBar";
 import { useIndoorNav } from "./hooks/useIndoorNav";
 import { useLocalizationQuality } from "./hooks/useLocalizationQuality";
 import { useNavigation } from "./hooks/useNavigation";
+import { useSafetySummary } from "./hooks/useSafety";
 import { TeleopProvider } from "./hooks/useTeleop";
 import type { Pose2D } from "./lib/geometry";
 import { type MapSummary, sameMapSummary } from "./lib/occupancyGrid";
@@ -33,6 +34,7 @@ const Workspace = () => {
     const { connected } = useRos();
     const nav = useNavigation();
     const indoor = useIndoorNav();
+    const safety = useSafetySummary();
     const [highlighted, setHighlighted] = useState<string | null>(null);
     // The URL hash selects the tab (#drive, #navigate, #facility), so a tab can be bookmarked.
     const [tab, setTabState] = useState<Tab>(() => {
@@ -154,7 +156,7 @@ const Workspace = () => {
             {/* Above the tabs, so manual driving keeps publishing whichever tab is open. */}
             <TeleopProvider>
                 <div className="app">
-                    <TopBar localization={localization} />
+                    <TopBar localization={localization} safety={safety} />
                     <main className="workspace">
                         <div className="map-area">
                             <MapView
@@ -181,7 +183,7 @@ const Workspace = () => {
                                 showCostmap={showCostmap}
                                 setShowCostmap={setShowCostmap}
                             />
-                            <MapDriveWidget tab={tab} mapping={locMode === LOCALIZATION_MODE.MAPPING} />
+                            <MapDriveWidget tab={tab} mapping={locMode === LOCALIZATION_MODE.MAPPING} safety={safety} />
                             {pending && (
                                 <PendingBar
                                     tool={pending.tool}

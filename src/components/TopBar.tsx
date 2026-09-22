@@ -7,6 +7,7 @@ import {
     Crosshair,
     Gamepad2,
     Hand,
+    OctagonX,
     ShieldAlert,
     ShieldCheck,
     Wifi,
@@ -18,15 +19,9 @@ import { useLatency } from "../hooks/useLatency";
 import { useNow, useTopic } from "../hooks/useTopic";
 import type { Quality } from "../lib/locQuality";
 import { nsName } from "../lib/namespace";
-import {
-    batteryPercent,
-    type Level,
-    type SafetyCommandEchoMsg,
-    type SafetyStatusMsg,
-    summarizeSafety,
-    worstDiagnosticLevel,
-} from "../lib/status";
+import { batteryPercent, type Level, type SafetySummary, worstDiagnosticLevel } from "../lib/status";
 import { useRos } from "../ros/RosProvider";
+import { TriggerButton } from "./TriggerButton";
 
 const STALE_MS = 3000;
 const ICON = 18;
@@ -62,7 +57,7 @@ export interface LocalizationStatus {
 
 const QUALITY_LEVEL: Record<Quality["level"], Level> = { good: "ok", fair: "warn", poor: "error", unknown: "unknown" };
 
-export const TopBar = ({ localization }: { localization: LocalizationStatus }) => {
+export const TopBar = ({ localization, safety: safetySummary }: { localization: LocalizationStatus; safety: SafetySummary }) => {
     const { config, driveMode } = useApp();
     const { connected } = useRos();
     const ns = config.namespace;
@@ -73,19 +68,8 @@ export const TopBar = ({ localization }: { localization: LocalizationStatus }) =
         nsName(ns, "rover_battery/battery_status"), "sensor_msgs/msg/BatteryState", 1000);
     const charging = useTopic<{ charging: boolean }>(
         nsName(ns, "rover_battery/charging_status"), "rover_msgs/msg/ChargingStatus", 1000);
-    const safety = useTopic<SafetyStatusMsg>(
-        nsName(ns, "hardware_interface/safety_status"), "rover_msgs/msg/SafetyStatus", 250);
-    const echo = useTopic<SafetyCommandEchoMsg>(
-        nsName(ns, "hardware_interface/safety_command_echo"), "rover_msgs/msg/SafetyCommandEcho", 250);
-    const lock = useTopic<{ data: boolean }>(nsName(ns, "motion_lock"), "std_msgs/msg/Bool", 250);
     const diag = useTopic<{ status: { level: number }[] }>(
         nsName(ns, "diagnostics_agg"), "diagnostic_msgs/msg/DiagnosticArray", 1000);
-
-    const safetySummary = summarizeSafety(
-        fresh(safety.receivedAt, now) ? safety.message : null,
-        fresh(echo.receivedAt, now) ? echo.message : null,
-        fresh(lock.receivedAt, now) ? lock.message?.data ?? null : true, // stale lock = locked, like twist_mux
-    );
 
     const pct = fresh(battery.receivedAt, now) ? batteryPercent(battery.message?.percentage) : null;
     const isCharging = Boolean(fresh(charging.receivedAt, now) && charging.message?.charging);
@@ -115,6 +99,7 @@ export const TopBar = ({ localization }: { localization: LocalizationStatus }) =
                 </span>
             </div>
 
+            <div className="topbar-right">
             <div className="status-strip">
                 {localization.mode !== null && (
                     <Pill
@@ -150,6 +135,16 @@ export const TopBar = ({ localization }: { localization: LocalizationStatus }) =
                     value={!connected ? "Offline" : latency === null ? "—" : `${latency} ms`}
                     title="Round trip to the rover through foxglove_bridge"
                 />
+            </div>
+            {/* On every tab, outside the scrolling strip: a stop must never be one tab away. */}
+            <TriggerButton
+                service={nsName(ns, "hardware_interface/sw_user_e_stop_set")}
+                label="E-STOP"
+                icon={<OctagonX size={18} />}
+                className="btn btn-estop-top"
+                disabled={!connected}
+                title="Software e-stop: cuts the motor contactor (no confirmation)"
+            />
             </div>
         </header>
     );

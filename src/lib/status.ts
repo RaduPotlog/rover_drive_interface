@@ -82,3 +82,10 @@ export const summarizeSafety = (
     }
     return { level: "ok", label: "Ready", detail: "No e-stop, latch or motion lock" };
 };
+
+/** The rover can't drive until someone resets something: e-stop, latch, lock or a fault. */
+export const needsRecovery = (s: SafetySummary): boolean => s.level === "warn" || s.level === "error";
+
+/** Short, shouting form for a small badge: "E-STOP", "LATCHED", "MOTION LOCKED", ... */
+export const safetyBadge = (s: SafetySummary): string =>
+    s.label.startsWith("E-STOP") ? "E-STOP" : s.label.toUpperCase();
