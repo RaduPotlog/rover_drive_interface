@@ -37,7 +37,10 @@ interface GridLayer {
     frame: string;
 }
 
-const FOOTPRINT = 0.98; // m, square (rover_nav_params.yaml)
+const FOOTPRINT = 0.98; // m, square, padded Nav 2 footprint (bringup.launch.py bounding box)
+const ROVER_LENGTH = 0.839; // m, outer wheel edges: wheelbase + 2 * wheel_radius (wheel_01.yaml)
+const ROVER_WIDTH = 0.734; // m, wheel_separation + wheel_width
+const ROVER_COLOR = "#3b82f6";
 const SCAN_COLOR = "#38bdf8"; // live lidar when there is no saved map to match against
 const POINT_COLOR: Record<PointMatch, string> = { wall: "#22c55e", new: SCAN_COLOR, conflict: "#ef4444" };
 const TOOL_COLOR: Record<MapTool, string> = {
@@ -292,16 +295,20 @@ export const MapView = ({
         // Robot.
         const robot = tf.current.lookup(mapFrame(), baseFrame);
         if (robot) {
-            const h = FOOTPRINT / 2;
-            const corners = [[h, h], [h, -h], [-h, -h], [-h, h]].map(([x, y]) => worldToScreen(v, s, transformPoint(robot, { x, y })));
-            ctx.fillStyle = "rgba(245, 180, 0, 0.25)";
-            ctx.strokeStyle = "#f5b400";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            corners.forEach((c, i) => (i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y)));
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
+            const drawBox = (hx: number, hy: number, fill: string, stroke: string) => {
+                const corners = [[hx, hy], [hx, -hy], [-hx, -hy], [-hx, hy]].map(([x, y]) => worldToScreen(v, s, transformPoint(robot, { x, y })));
+                ctx.fillStyle = fill;
+                ctx.strokeStyle = stroke;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                corners.forEach((c, i) => (i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y)));
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            };
+            // Nav 2 footprint (padded), then the rover's real outline inside it.
+            drawBox(FOOTPRINT / 2, FOOTPRINT / 2, "rgba(245, 180, 0, 0.25)", "#f5b400");
+            drawBox(ROVER_LENGTH / 2, ROVER_WIDTH / 2, "rgba(59, 130, 246, 0.25)", ROVER_COLOR);
             drawArrow(ctx, robot, "#f5b400", 0.7);
         }
 
