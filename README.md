@@ -25,6 +25,10 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
   - twist_mux's 0.5 s timeout then stops the rover.
 - **Controls.**
   - On-screen joystick, or a gamepad while **L1/LB** is held.
+  - A compact **map drive widget** (Neutral/Manual, joystick, speed) at the lower right of
+    the map on the Navigate and Facility tabs. It opens by itself when mapping starts, so a
+    facility map can be recorded without the RC transmitter.
+  - Manual driving keeps publishing whichever tab is open; the loop lives above the tabs.
   - Speed presets 20/50/80/100 % of the configured maximum.
   - Software e-stop set/reset and safety-latch reset (`<ns>/hardware_interface/sw_*`).
 - **Map (Navigate).** Shows:

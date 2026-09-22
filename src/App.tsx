@@ -6,6 +6,7 @@ import type { AppConfig } from "./config";
 import { DrivePanel } from "./components/DrivePanel";
 import { EStopPanel } from "./components/EStopPanel";
 import { FacilityPanel } from "./components/FacilityPanel";
+import { MapDriveWidget } from "./components/MapDriveWidget";
 import { MapToolbar } from "./components/MapToolbar";
 import { type MapTool, MapView } from "./components/MapView";
 import { isActive, NavPanel } from "./components/NavPanel";
@@ -15,6 +16,7 @@ import { type LocalizationStatus, TopBar } from "./components/TopBar";
 import { useIndoorNav } from "./hooks/useIndoorNav";
 import { useLocalizationQuality } from "./hooks/useLocalizationQuality";
 import { useNavigation } from "./hooks/useNavigation";
+import { TeleopProvider } from "./hooks/useTeleop";
 import type { Pose2D } from "./lib/geometry";
 import { nsFrame } from "./lib/namespace";
 import { LOCALIZATION_LABEL, LOCALIZATION_MODE, type PlaceMsg } from "./lib/rosTypes";
@@ -142,80 +144,84 @@ const Workspace = () => {
 
     return (
         <AppContext.Provider value={{ config, driveMode, setDriveMode: guardedSetDriveMode }}>
-            <div className="app">
-                <TopBar localization={localization} />
-                <main className="workspace">
-                    <div className="map-area">
-                        <MapView
-                            tool={tool}
-                            onPoseDrawn={onPoseDrawn}
-                            pending={pending}
-                            markers={markers}
-                            onMarkerClick={(id) => { setHighlighted(id); setTab("navigate") }}
-                            showCostmap={showCostmap}
-                            follow={follow}
-                            onRobotPose={setRobotPose}
-                            onMapFrame={setMapFrame}
-                            scanMatchEnabled={localized}
-                            onScanMatch={onScanMatch}
-                        />
-                        <MapToolbar
-                            tool={tool}
-                            setTool={(t) => { setTool(t); setPending(null) }}
-                            disabledTools={disabledTools}
-                            follow={follow}
-                            setFollow={setFollow}
-                            showCostmap={showCostmap}
-                            setShowCostmap={setShowCostmap}
-                        />
-                        {pending && (
-                            <PendingBar
-                                tool={pending.tool}
-                                pose={pending.pose}
-                                busy={busy}
-                                error={pendingError}
-                                onConfirm={confirm}
-                                onCancel={() => setPending(null)}
+            {/* Above the tabs, so manual driving keeps publishing whichever tab is open. */}
+            <TeleopProvider>
+                <div className="app">
+                    <TopBar localization={localization} />
+                    <main className="workspace">
+                        <div className="map-area">
+                            <MapView
+                                tool={tool}
+                                onPoseDrawn={onPoseDrawn}
+                                pending={pending}
+                                markers={markers}
+                                onMarkerClick={(id) => { setHighlighted(id); setTab("navigate") }}
+                                showCostmap={showCostmap}
+                                follow={follow}
+                                onRobotPose={setRobotPose}
+                                onMapFrame={setMapFrame}
+                                scanMatchEnabled={localized}
+                                onScanMatch={onScanMatch}
                             />
-                        )}
-                    </div>
-                    <aside className="sidebar">
-                        <nav className="tabs" role="tablist">
-                            <button role="tab" aria-selected={tab === "drive"} className={`tab ${tab === "drive" ? "tab-active" : ""}`} onClick={() => setTab("drive")}>
-                                <Gamepad2 size={16} />Drive
-                            </button>
-                            <button role="tab" aria-selected={tab === "navigate"} className={`tab ${tab === "navigate" ? "tab-active" : ""}`} onClick={() => setTab("navigate")}>
-                                <Navigation size={16} />Navigate
-                            </button>
-                            <button role="tab" aria-selected={tab === "facility"} className={`tab ${tab === "facility" ? "tab-active" : ""}`} onClick={() => setTab("facility")}>
-                                <Building2 size={16} />Facility
-                            </button>
-                        </nav>
-                        <div className="tabs-rule" />
-                        <div className="sidebar-body">
-                            {tab === "drive" && (
-                                <>
-                                    <DrivePanel />
-                                    <EStopPanel />
-                                </>
+                            <MapToolbar
+                                tool={tool}
+                                setTool={(t) => { setTool(t); setPending(null) }}
+                                disabledTools={disabledTools}
+                                follow={follow}
+                                setFollow={setFollow}
+                                showCostmap={showCostmap}
+                                setShowCostmap={setShowCostmap}
+                            />
+                            <MapDriveWidget tab={tab} mapping={locMode === LOCALIZATION_MODE.MAPPING} />
+                            {pending && (
+                                <PendingBar
+                                    tool={pending.tool}
+                                    pose={pending.pose}
+                                    busy={busy}
+                                    error={pendingError}
+                                    onConfirm={confirm}
+                                    onCancel={() => setPending(null)}
+                                />
                             )}
-                            {tab === "navigate" && (
-                                <>
-                                    <NavPanel mission={nav.mission} robotPose={robotPose} onStop={stop} stopError={stopError} />
-                                    <PlacesPanel
-                                        indoor={indoor}
-                                        robotPose={robotPose}
-                                        onGo={goToPlaces}
-                                        highlighted={highlighted}
-                                        setHighlighted={setHighlighted}
-                                    />
-                                </>
-                            )}
-                            {tab === "facility" && <FacilityPanel indoor={indoor} robotPose={robotPose} />}
                         </div>
-                    </aside>
-                </main>
-            </div>
+                        <aside className="sidebar">
+                            <nav className="tabs" role="tablist">
+                                <button role="tab" aria-selected={tab === "drive"} className={`tab ${tab === "drive" ? "tab-active" : ""}`} onClick={() => setTab("drive")}>
+                                    <Gamepad2 size={16} />Drive
+                                </button>
+                                <button role="tab" aria-selected={tab === "navigate"} className={`tab ${tab === "navigate" ? "tab-active" : ""}`} onClick={() => setTab("navigate")}>
+                                    <Navigation size={16} />Navigate
+                                </button>
+                                <button role="tab" aria-selected={tab === "facility"} className={`tab ${tab === "facility" ? "tab-active" : ""}`} onClick={() => setTab("facility")}>
+                                    <Building2 size={16} />Facility
+                                </button>
+                            </nav>
+                            <div className="tabs-rule" />
+                            <div className="sidebar-body">
+                                {tab === "drive" && (
+                                    <>
+                                        <DrivePanel />
+                                        <EStopPanel />
+                                    </>
+                                )}
+                                {tab === "navigate" && (
+                                    <>
+                                        <NavPanel mission={nav.mission} robotPose={robotPose} onStop={stop} stopError={stopError} />
+                                        <PlacesPanel
+                                            indoor={indoor}
+                                            robotPose={robotPose}
+                                            onGo={goToPlaces}
+                                            highlighted={highlighted}
+                                            setHighlighted={setHighlighted}
+                                        />
+                                    </>
+                                )}
+                                {tab === "facility" && <FacilityPanel indoor={indoor} robotPose={robotPose} />}
+                            </div>
+                        </aside>
+                    </main>
+                </div>
+            </TeleopProvider>
         </AppContext.Provider>
     );
 };

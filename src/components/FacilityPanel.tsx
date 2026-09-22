@@ -64,7 +64,7 @@ export const FacilityPanel = ({ indoor }: { indoor: IndoorNav; robotPose: Pose2D
 
             {mapping ? (
                 <>
-                    <p className="hint rec"><span className="rec-dot" /> REC: drive the rover (Manual) to cover the area.</p>
+                    <p className="hint rec"><span className="rec-dot" /> REC: drive the rover to cover the area - with the joystick on the map (Manual), the Drive tab or the RC transmitter.</p>
                     <div className="inline-form">
                         <input
                             className="text-input"

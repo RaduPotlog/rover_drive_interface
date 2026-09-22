@@ -26,6 +26,12 @@ export const Joystick = ({ disabled, onChange, size = 200 }: {
         if (disabled) release();
     }, [disabled, release]);
 
+    // The drive loop outlives this stick (it runs above the tabs), so unmounting mid-drag,
+    // e.g. on a tab switch, must centre it rather than leave the last deflection driving.
+    const onChangeRef = useRef(onChange);
+    onChangeRef.current = onChange;
+    useEffect(() => () => onChangeRef.current({ x: 0, y: 0 }), []);
+
     const update = (clientX: number, clientY: number) => {
         const rect = baseRef.current?.getBoundingClientRect();
         if (!rect) return;
