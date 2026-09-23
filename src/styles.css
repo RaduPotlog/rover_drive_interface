@@ -358,6 +358,57 @@ svg { flex-shrink: 0; }
     display: flex; flex-direction: column; gap: 12px;
 }
 
+/* ---------------------------------------------------------------- aux IO popup */
+.aux-status {
+    padding: 8px 10px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600;
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
+}
+.aux-status-ok { color: var(--ok); border-color: rgba(34, 197, 94, 0.35); }
+.aux-status-warn { color: var(--warn); border-color: rgba(245, 158, 11, 0.45); }
+.aux-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 560px) { .aux-grid { grid-template-columns: 1fr; } }
+.aux-section { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.aux-heading {
+    margin: 0 0 2px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted);
+}
+.aux-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 46px;
+    padding: 6px 10px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border);
+}
+.aux-row-stale { opacity: 0.5; }
+.aux-name { display: flex; flex-direction: column; min-width: 0; font-size: 13px; font-weight: 700; }
+.aux-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aux-pin { font-size: 10.5px; font-weight: 600; color: var(--muted); font-family: ui-monospace, monospace; }
+.aux-err { font-size: 11px; font-weight: 600; color: var(--warn); }
+.aux-switch {
+    position: relative; flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+    width: 74px; height: 30px; padding: 3px; border-radius: 999px; cursor: pointer;
+    background: var(--surface-3); border: 1px solid var(--border-strong); color: var(--muted);
+    font-size: 11.5px; font-weight: 800; transition: background 0.15s, border-color 0.15s;
+    touch-action: manipulation;
+}
+.aux-switch:disabled { opacity: 0.42; cursor: not-allowed; }
+.aux-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.aux-switch-knob {
+    display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--muted); color: var(--surface); transition: transform 0.15s, background 0.15s;
+}
+.aux-switch-on { background: var(--accent-soft); border-color: rgba(252, 168, 0, 0.55); color: var(--accent); }
+.aux-switch-on .aux-switch-knob { transform: translateX(44px); background: var(--accent); }
+.aux-switch-on .aux-switch-text { transform: translateX(-24px); }
+.aux-switch-text { transition: transform 0.15s; }
+.aux-switch-pending { border-style: dashed; }
+.aux-spin { animation: aux-spin 0.9s linear infinite; }
+@keyframes aux-spin { to { transform: rotate(360deg) } }
+.aux-dot {
+    flex-shrink: 0; min-width: 48px; padding: 4px 8px; border-radius: 999px; text-align: center;
+    font-size: 11.5px; font-weight: 800; color: var(--muted); background: var(--surface-3);
+    border: 1px solid var(--border-strong);
+}
+.aux-dot-on { color: var(--ok); background: rgba(34, 197, 94, 0.13); border-color: rgba(34, 197, 94, 0.45); }
+.aux-note { margin: 0; font-size: 11.5px; color: var(--muted); }
+
 /* ---------------------------------------------------------------- diagnostics popup */
 .pill-clickable { cursor: pointer; text-align: left; color: inherit; }
 .pill-clickable:hover { border-color: var(--border-strong); background: var(--surface-3); }

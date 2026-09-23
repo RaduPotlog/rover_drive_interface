@@ -1,5 +1,6 @@
 // Runtime configuration. nginx serves /config.json, rendered by docker/start.sh from the
 // container environment, so one image works for any $ROVER_NAMESPACE.
+import { AUX_COUNT, parseAuxNames } from "./lib/auxIo";
 import { sanitizeNamespace } from "./lib/namespace";
 
 export interface AppConfig {
@@ -14,6 +15,9 @@ export interface AppConfig {
     /** Stick expo 0 (linear) .. 1 per axis; turning gets more, it is the twitchy one. */
     expoLinear: number;
     expoAngular: number;
+    /** Operator names for aux outputs DIO00..05 and inputs DIO06..11; always AUX_COUNT each. */
+    auxOutputNames: string[];
+    auxInputNames: string[];
 }
 
 const DEFAULTS: AppConfig = {
@@ -25,6 +29,8 @@ const DEFAULTS: AppConfig = {
     trackWidth: 1.0204,
     expoLinear: 0.3,
     expoAngular: 0.5,
+    auxOutputNames: parseAuxNames("", AUX_COUNT, "Output"),
+    auxInputNames: parseAuxNames("", AUX_COUNT, "Input"),
 };
 
 const positive = (v: unknown, fallback: number) =>
@@ -43,6 +49,8 @@ export const parseConfig = (raw: Record<string, unknown>): AppConfig => ({
     trackWidth: positive(raw.trackWidth, DEFAULTS.trackWidth),
     expoLinear: unit(raw.expoLinear, DEFAULTS.expoLinear),
     expoAngular: unit(raw.expoAngular, DEFAULTS.expoAngular),
+    auxOutputNames: parseAuxNames(raw.auxOutputNames, AUX_COUNT, "Output"),
+    auxInputNames: parseAuxNames(raw.auxInputNames, AUX_COUNT, "Input"),
 });
 
 export const loadConfig = async (): Promise<AppConfig> => {

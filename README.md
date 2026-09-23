@@ -62,6 +62,7 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
 - **Top bar.** Shows:
   - safety (e-stop, latch, contactor, `motion_lock`);
   - worst `diagnostics_agg` level - click it for the diagnostics popup;
+  - aux IO: how many aux outputs are on - click it for the Aux IO popup;
   - battery and charging;
   - link latency (round trip through `/rosapi/get_time`);
   - the localization mode.
@@ -77,6 +78,20 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
   The history keeps filling while the popup is closed, so the timeline is already full when
   it opens. Cockpit's *Capture Diagnostics* has no equivalent here - it runs commands on the
   robot through Cockpit's privileged API, so log capture stays on the Cockpit page.
+
+- **Aux IO popup.** Clicking the top bar's **Aux IO** chip opens a popup for the safety PLC's
+  general-purpose IO (not part of the safety chain):
+  - six **outputs** (PLC DIO00..05), each with an ON/OFF switch that calls
+    `<ns>/hardware_interface/aux_output_<i>/set` (`std_srvs/SetBool`). No confirmation.
+  - The switch shows what the PLC reads back, not just the last click. A switch that the PLC
+    still disagrees with 1 s after the rover accepted it is flagged, and a rejected or
+    timed-out call shows its reason on that row.
+  - six **inputs** (DIO06..11), shown ON/OFF.
+  - Both come from `<ns>/hardware_interface/aux_io_state` (`rover_msgs/AuxIoState`).
+    Switches are disabled while that topic is stale (3 s) or reports the PLC link down.
+  - Names come from `auxOutputNames` / `auxInputNames` in `config.json`
+    (`ROVER_DRIVE_AUX_OUTPUT_NAMES` / `ROVER_DRIVE_AUX_INPUT_NAMES`, comma-separated).
+  Needs the rover_hardware_interface aux IO support. There is none in simulation.
 
 Tabs can be deep-linked: `#drive`, `#navigate`, `#facility`.
 

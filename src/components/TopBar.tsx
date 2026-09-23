@@ -4,6 +4,7 @@ import {
     Battery,
     BatteryCharging,
     BatteryWarning,
+    CircuitBoard,
     Crosshair,
     Gamepad2,
     Hand,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { useApp } from "../AppContext";
+import { useAuxIo } from "../hooks/useAuxIo";
 import { useDiagnostics } from "../hooks/useDiagnostics";
 import { useLatency } from "../hooks/useLatency";
 import { useNow, useTopic } from "../hooks/useTopic";
@@ -22,6 +24,7 @@ import type { Quality } from "../lib/locQuality";
 import { nsName } from "../lib/namespace";
 import { batteryPercent, type Level, type SafetySummary, worstDiagnosticLevel } from "../lib/status";
 import { useRos } from "../ros/RosProvider";
+import { AuxIoModal } from "./AuxIoModal";
 import { DiagnosticsModal } from "./diagnostics/DiagnosticsModal";
 import { TriggerButton } from "./TriggerButton";
 
@@ -90,6 +93,9 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
     const diag = useDiagnostics();
     const [diagOpen, setDiagOpen] = useState(false);
     const diagPill = useRef<HTMLButtonElement>(null);
+    const aux = useAuxIo();
+    const [auxOpen, setAuxOpen] = useState(false);
+    const auxPill = useRef<HTMLButtonElement>(null);
 
     const battery = useTopic<{ percentage: number; voltage: number }>(
         nsName(ns, "rover_battery/battery_status"), "sensor_msgs/msg/BatteryState", 1000);
@@ -145,6 +151,9 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
                 <Pill level={diagLevel} icon={<Activity size={ICON} />} label="Diagnostics" value={diagText[diagLevel]}
                     title="Worst level in diagnostics_agg - click for details"
                     onClick={() => setDiagOpen(true)} buttonRef={diagPill} expanded={diagOpen} />
+                <Pill level={aux.level} icon={<CircuitBoard size={ICON} />} label="Aux IO" value={aux.value}
+                    title={`${aux.detail} - click to switch outputs`}
+                    onClick={() => setAuxOpen(true)} buttonRef={auxPill} expanded={auxOpen} />
                 <Pill
                     level={batteryLevel}
                     icon={<BatteryIcon size={ICON} />}
@@ -175,6 +184,9 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
         </header>
         {diagOpen && (
             <DiagnosticsModal onClose={() => { setDiagOpen(false); diagPill.current?.focus() }} />
+        )}
+        {auxOpen && (
+            <AuxIoModal aux={aux} onClose={() => { setAuxOpen(false); auxPill.current?.focus() }} />
         )}
         </>
     );
