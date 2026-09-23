@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { padToStick } from "../src/lib/gamepad";
-import { applyDeadzone, applyExpo, limitRimSpeed, mayPublish, stickToTwist, twistStamped } from "../src/lib/teleop";
+import {
+    applyDeadzone, applyExpo, limitRimSpeed, mayPublish, shouldPublishTwist, stickToTwist, twistStamped,
+} from "../src/lib/teleop";
 
 const limits = { maxLinear: 1.0, maxAngular: 1.0 };
 
@@ -144,5 +146,31 @@ describe("applyExpo", () => {
         expect(half.angular).toBeCloseTo(-0.3125, 12); // 0.5·0.5 + 0.5·0.125
         const zero = stickToTwist({ x: 0, y: 0 }, 1, soft);
         expect(Object.is(zero.linear, 0) && Object.is(zero.angular, 0)).toBe(true);
+    });
+});
+
+describe("shouldPublishTwist", () => {
+    const moving = { linear: 0.3, angular: -0.1 };
+    const zero = { linear: 0, angular: 0 };
+
+    it("always sends a non-zero command", () => {
+        expect(shouldPublishTwist(moving, true)).toBe(true);
+        expect(shouldPublishTwist(moving, false)).toBe(true);
+        expect(shouldPublishTwist({ linear: 0, angular: 0.2 }, true)).toBe(true);
+    });
+
+    it("sends the first zero after motion, then stays quiet", () => {
+        expect(shouldPublishTwist(zero, false)).toBe(true);
+        expect(shouldPublishTwist(zero, true)).toBe(false);
+    });
+
+    it("walks a release: motion, one zero, silence", () => {
+        let lastSentZero = true; // as the publish loop starts
+        const sent = [zero, moving, moving, zero, zero, zero].map((t) => {
+            const send = shouldPublishTwist(t, lastSentZero);
+            if (send) lastSentZero = t.linear === 0 && t.angular === 0;
+            return send;
+        });
+        expect(sent).toEqual([false, true, true, true, false, false]);
     });
 });

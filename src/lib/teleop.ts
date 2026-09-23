@@ -116,6 +116,16 @@ export const mayPublish = (state: {
     focused: boolean;
 }): boolean => state.manual && state.connected && state.visible && state.focused;
 
+export const isZeroTwist = (t: Twist2D): boolean => t.linear === 0 && t.angular === 0;
+
+/**
+ * Zero once, as rover_crsf_teleop does: a zero command goes out only right after a non-zero
+ * one, so a released stick stops the rover once and then leaves twist_mux to fall through
+ * (after its 0.5 s timeout) instead of holding the base against Nav 2.
+ */
+export const shouldPublishTwist = (twist: Twist2D, lastSentZero: boolean): boolean =>
+    !(isZeroTwist(twist) && lastSentZero);
+
 export const twistStamped = (twist: Twist2D, frameId: string, nowMs = Date.now()) => ({
     header: {
         stamp: { sec: Math.floor(nowMs / 1000), nanosec: (nowMs % 1000) * 1_000_000 },

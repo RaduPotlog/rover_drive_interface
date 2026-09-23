@@ -18,9 +18,12 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
 ## Features
 
 - **Neutral / Manual.** The page starts in Neutral and publishes nothing. **Manual**
-  publishes `geometry_msgs/TwistStamped` on `<ns>/teleop_driver_interface_cmd_vel_stamped` at 10 Hz.
-  That is the UI's own twist_mux input, priority 8: it beats Nav 2 (5), while the RC link (110)
-  and Foxglove (100) override it.
+  publishes `geometry_msgs/TwistStamped` on `<ns>/teleop_driver_interface_cmd_vel_stamped` at 10 Hz
+  while the stick is deflected. Releasing the stick sends one zero and then nothing, as the RC
+  teleop does, so an idle Manual does not hold the base: Nav 2 can drive again after twist_mux's
+  0.5 s timeout. That is the UI's own twist_mux input, priority 8: it beats Nav 2 (5), while the
+  RC link (110) and Foxglove (100) override it. Switching to Manual still cancels a running
+  mission, and Go To is disabled in Manual.
 - **Deadman.** Publishing stops when:
   - the page is hidden or unfocused, or the bridge connection drops;
   - twist_mux's 0.5 s timeout then stops the rover.
