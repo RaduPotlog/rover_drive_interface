@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { padToStick } from "../src/lib/gamepad";
 import {
     applyDeadzone, applyExpo, limitRimSpeed, mayPublish, shouldPublishTwist, stickToTwist, twistStamped,
+    ZERO_BURST_TICKS,
 } from "../src/lib/teleop";
 
 const limits = { maxLinear: 1.0, maxAngular: 1.0 };
@@ -154,23 +155,38 @@ describe("shouldPublishTwist", () => {
     const zero = { linear: 0, angular: 0 };
 
     it("always sends a non-zero command", () => {
-        expect(shouldPublishTwist(moving, true)).toBe(true);
-        expect(shouldPublishTwist(moving, false)).toBe(true);
-        expect(shouldPublishTwist({ linear: 0, angular: 0.2 }, true)).toBe(true);
+        expect(shouldPublishTwist(moving, 0)).toBe(true);
+        expect(shouldPublishTwist(moving, ZERO_BURST_TICKS)).toBe(true);
+        expect(shouldPublishTwist({ linear: 0, angular: 0.2 }, ZERO_BURST_TICKS)).toBe(true);
     });
 
-    it("sends the first zero after motion, then stays quiet", () => {
-        expect(shouldPublishTwist(zero, false)).toBe(true);
-        expect(shouldPublishTwist(zero, true)).toBe(false);
+    it("sends zeros until the burst is spent", () => {
+        expect(shouldPublishTwist(zero, 0)).toBe(true);
+        expect(shouldPublishTwist(zero, ZERO_BURST_TICKS - 1)).toBe(true);
+        expect(shouldPublishTwist(zero, ZERO_BURST_TICKS)).toBe(false);
     });
 
-    it("walks a release: motion, one zero, silence", () => {
-        let lastSentZero = true; // as the publish loop starts
-        const sent = [zero, moving, moving, zero, zero, zero].map((t) => {
-            const send = shouldPublishTwist(t, lastSentZero);
-            if (send) lastSentZero = t.linear === 0 && t.angular === 0;
+    // Mirrors the publish loop in useTeleop.
+    const run = (twists: { linear: number; angular: number }[]) => {
+        let zerosSent = ZERO_BURST_TICKS;
+        return twists.map((t) => {
+            const send = shouldPublishTwist(t, zerosSent);
+            if (send) zerosSent = t.linear === 0 && t.angular === 0 ? zerosSent + 1 : 0;
             return send;
         });
-        expect(sent).toEqual([false, true, true, true, false, false]);
+    };
+
+    it("walks a release: motion, a 3-zero burst, silence", () => {
+        expect(run([moving, moving, zero, zero, zero, zero, zero]))
+            .toEqual([true, true, true, true, true, false, false]);
+    });
+
+    it("sends nothing when armed with the stick centred", () => {
+        expect(run([zero, zero, zero])).toEqual([false, false, false]);
+    });
+
+    it("restarts the burst after the stick moves mid-burst", () => {
+        expect(run([moving, zero, moving, zero, zero, zero, zero]))
+            .toEqual([true, true, true, true, true, true, false]);
     });
 });

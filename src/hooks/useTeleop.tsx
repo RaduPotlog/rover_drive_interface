@@ -13,13 +13,14 @@ import {
     stickToTwist,
     type Twist2D,
     twistStamped,
+    ZERO_BURST_TICKS,
     ZERO_TWIST,
 } from "../lib/teleop";
 import { Topic } from "../ros";
 import { useRos } from "../ros/RosProvider";
 import { usePageActive } from "./usePageActive";
 
-const PUBLISH_PERIOD_MS = 100; // 10 Hz, well inside twist_mux's 0.5 s timeout
+const PUBLISH_PERIOD_MS = 100; // 10 Hz: 3 periods per twist_mux's 0.3 s timeout
 const PRESET_KEY = "drive.speedPreset";
 
 const loadPreset = () => {
@@ -56,9 +57,10 @@ export const useTeleop = (): Teleop => {
  * screen. In NEUTRAL nothing is published and Nav 2 (twist_mux priority 5) or the RC
  * transmitter drive as usual. In MANUAL it publishes on its own twist_mux input,
  * teleop_driver_interface_cmd_vel_stamped (priority 8), at 10 Hz while the stick is deflected.
- * Releasing the stick sends one zero and then nothing, as the RC teleop does, so Nav 2 can
- * drive again after twist_mux's 0.5 s timeout. The RC transmitter (110) and Foxglove (100)
- * override it.
+ * Releasing the stick sends a short burst of zeros (~300 ms) and then nothing, as the RC teleop
+ * does, so Nav 2 can drive again after twist_mux's timeout. The RC transmitter (110) and
+ * Foxglove (100) override it. On the rover, rover_command_freshness_node drops commands that
+ * arrive late (held through a Wi-Fi stall), judged by header.stamp.
  */
 export const TeleopProvider = ({ children }: { children: ReactNode }) => {
     const { config, driveMode, setDriveMode } = useApp();
@@ -109,24 +111,24 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
             expoAngular: config.expoAngular,
         };
 
-        // Starts true, so arming Manual with the stick centred publishes nothing.
-        let lastSentZero = true;
+        // Starts spent, so arming Manual with the stick centred publishes nothing.
+        let zerosSent = ZERO_BURST_TICKS;
         const tick = () => {
             const padStick = padToStick(firstPad());
             setPadActive(padStick !== null);
             const out = stickToTwist(padStick ?? stick.current, fraction.current, limits);
             setTwist(out);
-            if (!shouldPublishTwist(out, lastSentZero)) return;
+            if (!shouldPublishTwist(out, zerosSent)) return;
             topic.publish(twistStamped(out, frame));
-            lastSentZero = isZeroTwist(out);
+            zerosSent = isZeroTwist(out) ? zerosSent + 1 : 0;
         };
         tick();
         const id = setInterval(tick, PUBLISH_PERIOD_MS);
         return () => {
             clearInterval(id);
             // One explicit stop, then silence: twist_mux falls back to the next input. Skipped
-            // when a zero already went out, so it doesn't re-take the mux from Nav 2.
-            if (!lastSentZero) topic.publish(twistStamped(ZERO_TWIST, frame));
+            // once the zero burst is complete, so it doesn't re-take the mux from Nav 2.
+            if (zerosSent < ZERO_BURST_TICKS) topic.publish(twistStamped(ZERO_TWIST, frame));
             topic.unadvertise();
         };
     }, [ros, session, publishing, config.namespace, config.maxLinear, config.maxAngular,

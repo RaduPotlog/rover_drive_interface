@@ -19,14 +19,19 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
 
 - **Neutral / Manual.** The page starts in Neutral and publishes nothing. **Manual**
   publishes `geometry_msgs/TwistStamped` on `<ns>/teleop_driver_interface_cmd_vel_stamped` at 10 Hz
-  while the stick is deflected. Releasing the stick sends one zero and then nothing, as the RC
-  teleop does, so an idle Manual does not hold the base: Nav 2 can drive again after twist_mux's
-  0.5 s timeout. That is the UI's own twist_mux input, priority 8: it beats Nav 2 (5), while the
-  RC link (110) and Foxglove (100) override it. Switching to Manual still cancels a running
-  mission, and Go To is disabled in Manual.
+  while the stick is deflected. Releasing the stick sends a short burst of zeros (~300 ms, so one
+  lost message cannot leave the rover moving) and then nothing, as the RC teleop does, so an idle
+  Manual does not hold the base: Nav 2 can drive again after twist_mux's timeout.
+  The UI has its own twist_mux input, priority 8: it beats Nav 2 (5), while the RC link (110)
+  and Foxglove (100) override it. Switching to Manual still cancels a running mission, and Go To
+  is disabled in Manual.
+- **Stale commands are dropped on the rover.** `rover_command_freshness_node` (rover_twist_mux)
+  passes the UI's commands to twist_mux only while they are fresh, so commands held in the
+  websocket through a Wi-Fi stall are not replayed. It works from the `header.stamp` this UI
+  sets, and tolerates the browser's clock being offset from the rover's.
 - **Deadman.** Publishing stops when:
   - the page is hidden or unfocused, or the bridge connection drops;
-  - twist_mux's 0.5 s timeout then stops the rover.
+  - twist_mux's 0.3 s timeout on this input then stops the rover.
 - **Controls.**
   - On-screen joystick, or a gamepad while **L1/LB** is held.
   - A compact **map drive widget** (Neutral/Manual, joystick, speed) at the lower right of

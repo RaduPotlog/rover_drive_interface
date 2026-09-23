@@ -107,7 +107,7 @@ export const stickToTwist = (
 /**
  * Whether the drive loop may publish at all. Manual mode owns the base only while the page
  * is visible and focused and the bridge is connected; anything else is the deadman letting
- * go, and twist_mux's 0.5 s timeout then stops the rover.
+ * go, and twist_mux's 0.3 s timeout on this input then stops the rover.
  */
 export const mayPublish = (state: {
     manual: boolean;
@@ -118,13 +118,17 @@ export const mayPublish = (state: {
 
 export const isZeroTwist = (t: Twist2D): boolean => t.linear === 0 && t.angular === 0;
 
+/** Zeros sent after a release: 300 ms at the 10 Hz publish rate. */
+export const ZERO_BURST_TICKS = 3;
+
 /**
- * Zero once, as rover_crsf_teleop does: a zero command goes out only right after a non-zero
- * one, so a released stick stops the rover once and then leaves twist_mux to fall through
- * (after its 0.5 s timeout) instead of holding the base against Nav 2.
+ * A short zero burst, as rover_crsf_teleop does: after a release the stop goes out
+ * ZERO_BURST_TICKS times, so one lost message cannot leave the last motion command standing,
+ * and then the UI goes quiet and twist_mux falls through (after its timeout) instead of the
+ * UI holding the base against Nav 2. zerosSent counts zeros since the last non-zero command.
  */
-export const shouldPublishTwist = (twist: Twist2D, lastSentZero: boolean): boolean =>
-    !(isZeroTwist(twist) && lastSentZero);
+export const shouldPublishTwist = (twist: Twist2D, zerosSent: number): boolean =>
+    !isZeroTwist(twist) || zerosSent < ZERO_BURST_TICKS;
 
 export const twistStamped = (twist: Twist2D, frameId: string, nowMs = Date.now()) => ({
     header: {
