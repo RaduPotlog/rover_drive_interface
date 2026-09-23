@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useApp } from "../AppContext";
 import { useSubscriptionRef } from "../hooks/useSubscriptionRef";
-import { normalizeAngle, type Pose2D, poseFromRos, transformPoint } from "../lib/geometry";
+import { compose, IDENTITY, normalizeAngle, type Pose2D, poseFromRos, transformPoint } from "../lib/geometry";
 import { nsFrame, nsName } from "../lib/namespace";
 import {
     buildMatchGrid,
@@ -18,6 +18,7 @@ import { gridToRgba, MAP_LEGEND_COLORS, type MapSummary, type OccupancyGrid, sum
 import type { LaserScan, Path, TFMessage } from "../lib/rosTypes";
 import { TfBuffer } from "../lib/tf";
 import { fitBounds, panBy, screenToWorld, type Size, type View, worldToScreen, zoomAt } from "../lib/view";
+import { resolveViewFrame, sameViewFrame, type ViewFrame, type ViewFrameMode } from "../lib/viewFrame";
 
 export type MapTool = "pan" | "setPose" | "goTo" | "place";
 
@@ -97,12 +98,16 @@ export interface MapViewProps {
     scanMatchEnabled?: boolean;
     /** Matching against the map SLAM is building: unmapped area is "new", not a miss. */
     mapping?: boolean;
+    /** Fixed frame to draw in; "auto" falls back to odom when the rover has no map pose. */
+    frameMode?: ViewFrameMode;
+    /** The frame actually drawn in (goals and poses drawn on the canvas are in it). */
+    onViewFrame?: (frame: ViewFrame) => void;
     onScanMatch?: (match: ScanMatch | null) => void;
 }
 
 export const MapView = ({
     tool, onPoseDrawn, pending, markers, onMarkerClick, showCostmap, follow, onRobotPose, onMapFrame,
-    onMapInfo, scanMatchEnabled = false, mapping = false, onScanMatch,
+    onMapInfo, scanMatchEnabled = false, mapping = false, onScanMatch, frameMode = "auto", onViewFrame,
 }: MapViewProps) => {
     const { config } = useApp();
     const ns = config.namespace;
@@ -122,8 +127,16 @@ export const MapView = ({
     const drag = useRef<{ tool: MapTool; start: { x: number; y: number }; pose: Pose2D } | null>(null);
     const pointers = useRef(new Map<number, { x: number; y: number }>());
     const [hasMap, setHasMap] = useState(false);
+    const [hasPose, setHasPose] = useState(false);
+    const [viewKind, setViewKind] = useState<ViewFrame["kind"]>("map");
 
+    // Read through a ref so the draw loop and intervals see a mode change without re-binding.
+    const frameModeRef = useRef(frameMode);
+    frameModeRef.current = frameMode;
+    const viewFrameOf = () => resolveViewFrame(frameModeRef.current, tf.current, ns, mapLayer.current?.frame);
     const mapFrame = () => mapLayer.current?.frame ?? nsFrame(ns, "map");
+    /** The fixed frame everything is drawn in (map, or odom when there is no map pose). */
+    const fixedFrame = () => viewFrameOf().frame;
     const baseFrame = nsFrame(ns, "base_link");
     const markDirty = () => { dirty.current = true };
 
@@ -150,7 +163,7 @@ export const MapView = ({
         if (!showCostmap) costLayer.current = null;
         markDirty();
     }, [showCostmap]);
-    useEffect(markDirty, [pending, markers, tool]);
+    useEffect(markDirty, [pending, markers, tool, frameMode]);
 
     // Scan-to-map match for the localization-quality indicator, twice a second.
     useEffect(() => {
@@ -158,32 +171,47 @@ export const MapView = ({
         const id = setInterval(() => {
             const sc = scan.current;
             const mg = matchGrid.current;
-            const toMap = sc ? tf.current.lookup(mapFrame(), sc.header.frame_id) : null;
+            // Matching compares the scan with the map grid, so it only means something in the map frame.
+            const toMap = sc && viewFrameOf().kind === "map" ? tf.current.lookup(mapFrame(), sc.header.frame_id) : null;
             onScanMatch(sc && mg && toMap ? scanMatch(mg, scanPointsInMap(sc, toMap), { ignoreUnknown: mapping }) : null);
         }, 500);
         return () => clearInterval(id);
     }, [scanMatchEnabled, mapping, onScanMatch]);
 
     // Robot pose to the parent, at a UI-friendly rate.
+    // The view frame is reported the same way; when it changes, the old view centre means
+    // nothing in the new frame, so re-centre.
     const lastReported = useRef<string>("");
+    const lastFrame = useRef<ViewFrame | null>(null);
     useEffect(() => {
-        const id = setInterval(() => {
-            const pose = tf.current.lookup(mapFrame(), baseFrame);
-            const key = pose ? `${pose.x.toFixed(2)},${pose.y.toFixed(2)},${pose.theta.toFixed(2)}` : "none";
+        const report = () => {
+            const vf = viewFrameOf();
+            if (!sameViewFrame(vf, lastFrame.current)) {
+                lastFrame.current = vf;
+                fitted.current = false;
+                setViewKind(vf.kind);
+                onViewFrame?.(vf);
+                markDirty();
+            }
+            const pose = tf.current.lookup(vf.frame, baseFrame);
+            setHasPose(pose !== null);
+            const key = pose ? `${vf.frame}:${pose.x.toFixed(2)},${pose.y.toFixed(2)},${pose.theta.toFixed(2)}` : "none";
             if (key !== lastReported.current) {
                 lastReported.current = key;
                 onRobotPose?.(pose);
             }
-        }, 250);
+        };
+        report();
+        const id = setInterval(report, 250);
         return () => clearInterval(id);
-    }, [ns, onRobotPose]);
+    }, [ns, onRobotPose, onViewFrame, frameMode]);
 
     // --- drawing ---------------------------------------------------------------------
     const drawGrid = (ctx: CanvasRenderingContext2D, layer: GridLayer, dpr: number, alpha = 1) => {
         const s = size.current;
         const v = view.current;
-        // Grid frame -> map frame (identity unless the layer is in another frame).
-        const toMap = layer.frame === mapFrame() ? { x: 0, y: 0, theta: 0 } : tf.current.lookup(mapFrame(), layer.frame);
+        // Grid frame -> view frame (identity unless the layer is in another frame).
+        const toMap = layer.frame === fixedFrame() ? IDENTITY : tf.current.lookup(fixedFrame(), layer.frame);
         if (!toMap) return;
         const o = transformPoint(toMap, layer.origin);
         ctx.save();
@@ -199,6 +227,41 @@ export const MapView = ({
         ctx.translate(0, -layer.height);
         ctx.drawImage(layer.image, 0, 0);
         ctx.restore();
+    };
+
+    /** Metric reference grid: 1 m lines, every 5th stronger, so odometry-only motion is visible. */
+    const drawMetricGrid = (ctx: CanvasRenderingContext2D) => {
+        const s = size.current;
+        const v = view.current;
+        if (v.scale < 4) return; // lines would be closer than 4 px
+        const tl = screenToWorld(v, s, { x: 0, y: 0 });
+        const br = screenToWorld(v, s, { x: s.width, y: s.height });
+        const line = (x0: number, y0: number, x1: number, y1: number) => {
+            const a = worldToScreen(v, s, { x: x0, y: y0 });
+            const b = worldToScreen(v, s, { x: x1, y: y1 });
+            ctx.moveTo(Math.round(a.x) + 0.5, Math.round(a.y) + 0.5);
+            ctx.lineTo(Math.round(b.x) + 0.5, Math.round(b.y) + 0.5);
+        };
+        ctx.lineWidth = 1;
+        for (const major of [false, true]) {
+            ctx.strokeStyle = major ? "rgba(255,255,255,0.11)" : "rgba(255,255,255,0.045)";
+            ctx.beginPath();
+            for (let x = Math.floor(tl.x); x <= Math.ceil(br.x); x++) {
+                if ((x % 5 === 0) === major) line(x, br.y, x, tl.y);
+            }
+            for (let y = Math.floor(br.y); y <= Math.ceil(tl.y); y++) {
+                if ((y % 5 === 0) === major) line(tl.x, y, br.x, y);
+            }
+            ctx.stroke();
+        }
+    };
+
+    /** A place (stored in the map frame) in the view frame, or null when it cannot be placed. */
+    const markerPose = (pose: Pose2D): Pose2D | null => {
+        const vf = fixedFrame();
+        if (vf === mapFrame()) return pose;
+        const toView = tf.current.lookup(vf, mapFrame());
+        return toView ? compose(toView, pose) : null;
     };
 
     const drawArrow = (ctx: CanvasRenderingContext2D, pose: Pose2D, color: string, length = 0.8) => {
@@ -235,6 +298,7 @@ export const MapView = ({
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.fillStyle = "#0f1216";
         ctx.fillRect(0, 0, s.width, s.height);
+        drawMetricGrid(ctx);
         if (mapLayer.current) drawGrid(ctx, mapLayer.current, dpr);
         if (costLayer.current) drawGrid(ctx, costLayer.current, dpr, 0.8);
 
@@ -243,9 +307,9 @@ export const MapView = ({
         // Planned path.
         const path = plan.current;
         if (path && path.poses.length > 1) {
-            const toMap = path.header.frame_id === mapFrame() || !path.header.frame_id
-                ? { x: 0, y: 0, theta: 0 }
-                : tf.current.lookup(mapFrame(), path.header.frame_id);
+            const toMap = path.header.frame_id === fixedFrame() || !path.header.frame_id
+                ? IDENTITY
+                : tf.current.lookup(fixedFrame(), path.header.frame_id);
             if (toMap) {
                 ctx.strokeStyle = "#2fbf71";
                 ctx.lineWidth = 3;
@@ -263,12 +327,12 @@ export const MapView = ({
         // Lidar scan.
         const sc = scan.current;
         if (sc) {
-            const toMap = tf.current.lookup(mapFrame(), sc.header.frame_id);
+            const toMap = tf.current.lookup(fixedFrame(), sc.header.frame_id);
             if (toMap) {
                 // Matched points (on a wall of the map) green, unmatched red - where the map and
                 // the world disagree is visible at a glance. While mapping, points in unmapped
                 // area are new ground, so they are a neutral cyan rather than an alarm red.
-                const mg = scanMatchEnabled ? matchGrid.current : null;
+                const mg = scanMatchEnabled && viewFrameOf().kind === "map" ? matchGrid.current : null;
                 for (const w of scanPointsInMap(sc, toMap)) {
                     ctx.fillStyle = !mg ? SCAN_COLOR
                         : mapping ? POINT_COLOR[classifyPoint(mg, w)]
@@ -282,9 +346,11 @@ export const MapView = ({
         // Places.
         ctx.font = "600 12px system-ui, sans-serif";
         for (const m of markers) {
-            const sp = worldToScreen(v, s, m.pose);
+            const pose = markerPose(m.pose);
+            if (!pose) continue;
+            const sp = worldToScreen(v, s, pose);
             const color = m.highlighted ? "#f5b400" : "#c38cff";
-            drawArrow(ctx, m.pose, color, 0.5);
+            drawArrow(ctx, pose, color, 0.5);
             ctx.fillStyle = "rgba(15,18,22,0.8)";
             const w = ctx.measureText(m.label).width + 8;
             ctx.fillRect(sp.x + 8, sp.y - 22, w, 16);
@@ -293,7 +359,7 @@ export const MapView = ({
         }
 
         // Robot.
-        const robot = tf.current.lookup(mapFrame(), baseFrame);
+        const robot = tf.current.lookup(fixedFrame(), baseFrame);
         if (robot) {
             const drawBox = (hx: number, hy: number, fill: string, stroke: string) => {
                 const corners = [[hx, hy], [hx, -hy], [-hx, -hy], [-hx, hy]].map(([x, y]) => worldToScreen(v, s, transformPoint(robot, { x, y })));
@@ -323,22 +389,32 @@ export const MapView = ({
         let raf = 0;
         const loop = () => {
             if (follow) {
-                const robot = tf.current.lookup(mapFrame(), baseFrame);
+                const robot = tf.current.lookup(fixedFrame(), baseFrame);
                 if (robot && (Math.abs(robot.x - view.current.cx) > 1e-3 || Math.abs(robot.y - view.current.cy) > 1e-3)) {
                     view.current = { ...view.current, cx: robot.x, cy: robot.y };
                     dirty.current = true;
                 }
             }
-            if (!fitted.current && mapLayer.current && size.current.width > 1) {
+            if (!fitted.current && size.current.width > 1) {
                 const l = mapLayer.current;
-                view.current = fitBounds(size.current, {
-                    minX: l.origin.x,
-                    minY: l.origin.y,
-                    maxX: l.origin.x + l.width * l.resolution,
-                    maxY: l.origin.y + l.height * l.resolution,
-                });
-                fitted.current = true;
-                dirty.current = true;
+                if (l && l.frame === fixedFrame()) {
+                    view.current = fitBounds(size.current, {
+                        minX: l.origin.x,
+                        minY: l.origin.y,
+                        maxX: l.origin.x + l.width * l.resolution,
+                        maxY: l.origin.y + l.height * l.resolution,
+                    });
+                    fitted.current = true;
+                    dirty.current = true;
+                } else {
+                    // No map in this frame (odom view): centre on the rover once it is known.
+                    const robot = tf.current.lookup(fixedFrame(), baseFrame);
+                    if (robot) {
+                        view.current = { ...view.current, cx: robot.x, cy: robot.y };
+                        fitted.current = true;
+                        dirty.current = true;
+                    }
+                }
             }
             if (dirty.current) {
                 dirty.current = false;
@@ -376,7 +452,9 @@ export const MapView = ({
     };
 
     const hitMarker = (p: { x: number; y: number }) => markers.find((m) => {
-        const sp = worldToScreen(view.current, size.current, m.pose);
+        const pose = markerPose(m.pose);
+        if (!pose) return false;
+        const sp = worldToScreen(view.current, size.current, pose);
         return Math.hypot(sp.x - p.x, sp.y - p.y) < 12;
     });
 
@@ -456,13 +534,18 @@ export const MapView = ({
                 onPointerCancel={onPointerUp}
                 onWheel={onWheel}
             />
-            {!hasMap && (
+            {!hasMap && !hasPose && (
                 <div className="map-empty">
                     <MapIcon size={34} strokeWidth={1.5} />
                     <div>Waiting for a map on {nsName(ns, "map")}…</div>
                 </div>
             )}
-            {hasMap && scanMatchEnabled && mapping && (
+            {viewKind === "odom" && (
+                <div className="map-legend map-odom-badge" title="The rover is drawn from wheel/IMU odometry only (no map -> odom transform). Position drifts over distance; the grid is 1 m.">
+                    <span><span className="legend-dot" style={{ background: "#f5b400" }} />Odom frame - no map localization, drift accumulates · grid 1 m</span>
+                </div>
+            )}
+            {viewKind === "map" && hasMap && scanMatchEnabled && mapping && (
                 <div className="map-legend" title="Lidar points on a mapped wall are green, in unmapped area cyan, and on mapped free space red: there the scan and the map disagree">
                     <span><span className="legend-dot" style={{ background: MAP_LEGEND_COLORS.free }} />Free</span>
                     <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.wall }} />Wall</span>
@@ -473,13 +556,13 @@ export const MapView = ({
                     <span><span className="legend-dot" style={{ background: POINT_COLOR.conflict }} />Conflict</span>
                 </div>
             )}
-            {hasMap && scanMatchEnabled && !mapping && (
+            {viewKind === "map" && hasMap && scanMatchEnabled && !mapping && (
                 <div className="map-legend" title="Lidar points on a wall of the saved map are green; red points hit free or unknown space">
                     <span><span className="legend-dot" style={{ background: "#22c55e" }} />Scan matches map</span>
                     <span><span className="legend-dot" style={{ background: "#ef4444" }} />No match</span>
                 </div>
             )}
-            {hasMap && !scanMatchEnabled && (
+            {viewKind === "map" && hasMap && !scanMatchEnabled && (
                 <div className="map-legend" title="Gray is map area the lidar has not seen yet; it fills in as the rover drives">
                     <span><span className="legend-dot" style={{ background: MAP_LEGEND_COLORS.free }} />Free</span>
                     <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.wall }} />Wall</span>
@@ -490,7 +573,7 @@ export const MapView = ({
             <div className="floating map-zoom">
                 <button className="tool-btn" title="Zoom in" onClick={() => zoomCentre(1.4)}><Plus size={18} /></button>
                 <button className="tool-btn" title="Zoom out" onClick={() => zoomCentre(1 / 1.4)}><Minus size={18} /></button>
-                <button className="tool-btn" title="Fit map" onClick={fit}><Maximize2 size={16} /></button>
+                <button className="tool-btn" title={viewKind === "odom" ? "Centre on the rover" : "Fit map"} onClick={fit}><Maximize2 size={16} /></button>
             </div>
         </div>
     );

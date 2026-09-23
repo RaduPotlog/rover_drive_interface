@@ -1,7 +1,15 @@
-import { Flag, Hand, Layers, LocateFixed, MapPin, Star } from "lucide-react";
+import { Compass, Flag, Hand, Layers, LocateFixed, MapPin, Star } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { nextViewFrameMode, type ViewFrame, type ViewFrameMode } from "../lib/viewFrame";
 import type { MapTool } from "./MapView";
+
+const FRAME_LABEL: Record<ViewFrameMode, string> = { auto: "Auto", map: "Map", odom: "Odom" };
+const FRAME_TITLE: Record<ViewFrameMode, string> = {
+    auto: "Map frame when the rover is localized, odometry otherwise",
+    map: "Always the map frame (needs map -> odom from AMCL/SLAM/GPS)",
+    odom: "Always the odom frame: wheel/IMU odometry, drifts over distance",
+};
 
 const TOOLS: { id: MapTool; label: string; icon: ReactNode; title: string }[] = [
     { id: "pan", label: "Pan", icon: <Hand size={16} />, title: "Pan and zoom the map" },
@@ -10,7 +18,9 @@ const TOOLS: { id: MapTool; label: string; icon: ReactNode; title: string }[] = 
     { id: "place", label: "Add place", icon: <Star size={16} />, title: "Click and drag to save a named place" },
 ];
 
-export const MapToolbar = ({ tool, setTool, disabledTools, follow, setFollow, showCostmap, setShowCostmap }: {
+export const MapToolbar = ({
+    tool, setTool, disabledTools, follow, setFollow, showCostmap, setShowCostmap, frameMode, setFrameMode, viewFrame,
+}: {
     tool: MapTool;
     setTool: (t: MapTool) => void;
     disabledTools: Partial<Record<MapTool, string>>;
@@ -18,6 +28,10 @@ export const MapToolbar = ({ tool, setTool, disabledTools, follow, setFollow, sh
     setFollow: (v: boolean) => void;
     showCostmap: boolean;
     setShowCostmap: (v: boolean) => void;
+    frameMode: ViewFrameMode;
+    setFrameMode: (m: ViewFrameMode) => void;
+    /** The frame actually drawn in, shown when Auto picked it. */
+    viewFrame: ViewFrame | null;
 }) => (
     <div className="map-toolbar">
         <div className="floating" role="toolbar" aria-label="Map tools">
@@ -42,6 +56,11 @@ export const MapToolbar = ({ tool, setTool, disabledTools, follow, setFollow, sh
             <button className={`tool-btn ${showCostmap ? "toggle-on" : ""}`} onClick={() => setShowCostmap(!showCostmap)}
                 title="Overlay Nav 2's global costmap" aria-pressed={showCostmap}>
                 <Layers size={16} /><span>Costmap</span>
+            </button>
+            <button className={`tool-btn ${viewFrame?.kind === "odom" ? "toggle-on" : ""}`} onClick={() => setFrameMode(nextViewFrameMode(frameMode))}
+                title={`View frame: ${FRAME_TITLE[frameMode]}${viewFrame ? `\nDrawing in ${viewFrame.frame}` : ""}\nClick to cycle Auto / Map / Odom`}>
+                <Compass size={16} />
+                <span>{FRAME_LABEL[frameMode]}{frameMode === "auto" && viewFrame ? ` · ${FRAME_LABEL[viewFrame.kind]}` : ""}</span>
             </button>
         </div>
     </div>

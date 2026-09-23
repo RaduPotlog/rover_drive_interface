@@ -1,5 +1,5 @@
 import { Building2, Gamepad2, Navigation } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppContext, type DriveMode, useApp } from "./AppContext";
 import type { AppConfig } from "./config";
@@ -24,11 +24,23 @@ import { type MapSummary, sameMapSummary } from "./lib/occupancyGrid";
 import { nsFrame } from "./lib/namespace";
 import { LOCALIZATION_LABEL, LOCALIZATION_MODE, type PlaceMsg } from "./lib/rosTypes";
 import type { Level } from "./lib/status";
+import { sameViewFrame, VIEW_FRAME_MODES, type ViewFrame, type ViewFrameMode } from "./lib/viewFrame";
 import { RosProvider, useRos } from "./ros/RosProvider";
 
 type Tab = "drive" | "navigate" | "facility";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+const FRAME_MODE_KEY = "map.frameMode";
+
+const loadFrameMode = (): ViewFrameMode => {
+    try {
+        const v = localStorage.getItem(FRAME_MODE_KEY) as ViewFrameMode | null;
+        return v && VIEW_FRAME_MODES.includes(v) ? v : "auto";
+    } catch {
+        return "auto";
+    }
+};
 
 const Workspace = () => {
     const { config, driveMode, setDriveMode } = useApp();
@@ -58,13 +70,29 @@ const Workspace = () => {
     const [mapInfo, setMapInfoState] = useState<MapSummary | null>(null);
     // The map arrives every second; only re-render when what the panel shows changes.
     const setMapInfo = useCallback((s: MapSummary) => setMapInfoState((prev) => (sameMapSummary(prev, s) ? prev : s)), []);
-    const frame = mapFrame ?? nsFrame(config.namespace, "map");
+    const [frameMode, setFrameMode] = useState<ViewFrameMode>(loadFrameMode);
+    useEffect(() => {
+        try {
+            localStorage.setItem(FRAME_MODE_KEY, frameMode);
+        } catch {
+            // per-viewer convenience only
+        }
+    }, [frameMode]);
+    const [viewFrame, setViewFrameState] = useState<ViewFrame | null>(null);
+    const setViewFrame = useCallback((f: ViewFrame) => setViewFrameState((prev) => (sameViewFrame(prev, f) ? prev : f)), []);
+    const odomView = viewFrame?.kind === "odom";
+    // Poses drawn on the canvas are in the frame it draws in; Nav 2 transforms goals into its global frame.
+    const frame = viewFrame?.frame ?? mapFrame ?? nsFrame(config.namespace, "map");
 
     const disabledTools: Partial<Record<MapTool, string>> = {};
     if (!connected) {
         disabledTools.setPose = disabledTools.goTo = disabledTools.place = "Not connected";
     }
     if (driveMode === "manual") disabledTools.goTo = "Switch to Neutral first - manual driving owns the base";
+    if (odomView) {
+        disabledTools.setPose = disabledTools.setPose ?? "Re-localizing needs the map frame - the view is on odometry";
+        disabledTools.place = disabledTools.place ?? "Places are stored in the map frame - the view is on odometry";
+    }
     const locMode = indoor.state?.mode;
     if (!indoor.available) {
         disabledTools.place = disabledTools.place ?? "Places need rover_indoor_nav_manager (indoor mode)";
@@ -85,14 +113,23 @@ const Workspace = () => {
     const modeLevel: Level = locMode === LOCALIZATION_MODE.LOCALIZATION ? "ok"
         : locMode === LOCALIZATION_MODE.MAPPING ? "warn"
             : locMode === LOCALIZATION_MODE.SWITCHING ? "stale" : "error";
-    const localization: LocalizationStatus = {
-        mode: indoor.available
-            ? `${LOCALIZATION_LABEL[locMode ?? 0]}${indoor.state?.map_name ? ` · ${indoor.state.map_name}` : ""}`
-            : quality ? "AMCL" : null,
-        modeLevel,
-        modeDetail: indoor.state?.message,
-        quality: judged ? quality : null,
-    };
+    // Drawing on odometry while nothing localizes: say so instead of a bare "No localization".
+    const odomFallback = odomView && locMode !== LOCALIZATION_MODE.LOCALIZATION && locMode !== LOCALIZATION_MODE.MAPPING;
+    const localization: LocalizationStatus = odomFallback
+        ? {
+            mode: "Odometry only",
+            modeLevel: "warn",
+            modeDetail: [`No map pose - the map shows ${viewFrame?.frame} (drifts)`, indoor.state?.message].filter(Boolean).join("\n"),
+            quality: null,
+        }
+        : {
+            mode: indoor.available
+                ? `${LOCALIZATION_LABEL[locMode ?? 0]}${indoor.state?.map_name ? ` · ${indoor.state.map_name}` : ""}`
+                : quality ? "AMCL" : null,
+            modeLevel,
+            modeDetail: indoor.state?.message,
+            quality: judged ? quality : null,
+        };
 
     const markers = indoor.places.map((p) => ({
         id: p.id,
@@ -174,6 +211,8 @@ const Workspace = () => {
                                 scanMatchEnabled={judged}
                                 mapping={mapping}
                                 onScanMatch={onScanMatch}
+                                frameMode={frameMode}
+                                onViewFrame={setViewFrame}
                             />
                             <MapToolbar
                                 tool={tool}
@@ -183,6 +222,9 @@ const Workspace = () => {
                                 setFollow={setFollow}
                                 showCostmap={showCostmap}
                                 setShowCostmap={setShowCostmap}
+                                frameMode={frameMode}
+                                setFrameMode={setFrameMode}
+                                viewFrame={viewFrame}
                             />
                             <MapDriveWidget tab={tab} mapping={locMode === LOCALIZATION_MODE.MAPPING} safety={safety} />
                             {pending && (
