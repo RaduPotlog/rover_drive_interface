@@ -55,7 +55,7 @@ export const useTeleop = (): Teleop => {
  * transmitter drive as usual. In MANUAL it publishes on its own twist_mux input,
  * teleop_driver_interface_cmd_vel_stamped (priority 8), at 10 Hz until the deadman lets go.
  * Zeros go out while the stick is centred, so the web UI holds the base against Nav 2; the
- * RC transmitter (10) and Foxglove (100) still override it.
+ * RC transmitter (110) and Foxglove (100) still override it.
  */
 export const TeleopProvider = ({ children }: { children: ReactNode }) => {
     const { config, driveMode, setDriveMode } = useApp();

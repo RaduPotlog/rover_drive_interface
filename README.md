@@ -19,7 +19,7 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
 
 - **Neutral / Manual.** The page starts in Neutral and publishes nothing. **Manual**
   publishes `geometry_msgs/TwistStamped` on `<ns>/teleop_driver_interface_cmd_vel_stamped` at 10 Hz.
-  That is the UI's own twist_mux input, priority 8: it beats Nav 2 (5), while the RC link (10)
+  That is the UI's own twist_mux input, priority 8: it beats Nav 2 (5), while the RC link (110)
   and Foxglove (100) override it.
 - **Deadman.** Publishing stops when:
   - the page is hidden or unfocused, or the bridge connection drops;
