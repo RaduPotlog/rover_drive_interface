@@ -52,9 +52,10 @@ export const useTeleop = (): Teleop => {
 /**
  * Manual driving, owned above the tabs so it keeps running whichever tab or joystick is on
  * screen. In NEUTRAL nothing is published and Nav 2 (twist_mux priority 5) or the RC
- * transmitter drive as usual. In MANUAL it publishes on teleop_foxglove_cmd_vel_stamped
- * (priority 100) at 10 Hz - zeros while the stick is centred, so the web UI holds the base -
- * until the deadman lets go.
+ * transmitter drive as usual. In MANUAL it publishes on its own twist_mux input,
+ * teleop_driver_interface_cmd_vel_stamped (priority 8), at 10 Hz until the deadman lets go.
+ * Zeros go out while the stick is centred, so the web UI holds the base against Nav 2; the
+ * RC transmitter (10) and Foxglove (100) still override it.
  */
 export const TeleopProvider = ({ children }: { children: ReactNode }) => {
     const { config, driveMode, setDriveMode } = useApp();
@@ -92,7 +93,7 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
         }
         const topic = new Topic<ReturnType<typeof twistStamped>>({
             ros,
-            name: nsName(config.namespace, "teleop_foxglove_cmd_vel_stamped"),
+            name: nsName(config.namespace, "teleop_driver_interface_cmd_vel_stamped"),
             messageType: "geometry_msgs/msg/TwistStamped",
         });
         const frame = nsFrame(config.namespace, "base_link");

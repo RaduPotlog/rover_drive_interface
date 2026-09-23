@@ -124,7 +124,7 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
                     <span className="brand-sub">Drive interface</span>
                 </div>
                 <span className={`mode-badge ${driveMode === "manual" ? "manual" : ""}`}
-                    title={driveMode === "manual" ? "Manual driving - the web UI owns the base" : "Neutral - the web UI is not driving"}>
+                    title={driveMode === "manual" ? "Manual driving - the web UI drives unless the RC transmitter or Foxglove is active" : "Neutral - the web UI is not driving"}>
                     {driveMode === "manual" ? <Gamepad2 size={14} /> : <Hand size={14} />}
                     {driveMode === "manual" ? "MANUAL" : "NEUTRAL"}
                 </span>
