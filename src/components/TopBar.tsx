@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import {
     Activity,
     Battery,
@@ -15,12 +15,14 @@ import {
 } from "lucide-react";
 
 import { useApp } from "../AppContext";
+import { useDiagnostics } from "../hooks/useDiagnostics";
 import { useLatency } from "../hooks/useLatency";
 import { useNow, useTopic } from "../hooks/useTopic";
 import type { Quality } from "../lib/locQuality";
 import { nsName } from "../lib/namespace";
 import { batteryPercent, type Level, type SafetySummary, worstDiagnosticLevel } from "../lib/status";
 import { useRos } from "../ros/RosProvider";
+import { DiagnosticsModal } from "./diagnostics/DiagnosticsModal";
 import { TriggerButton } from "./TriggerButton";
 
 const STALE_MS = 3000;
@@ -28,23 +30,45 @@ const ICON = 18;
 
 const fresh = (receivedAt: number | null, now: number) => receivedAt !== null && now - receivedAt < STALE_MS;
 
-export const Pill = ({ level, icon, label, value, title, children }: {
+export const Pill = ({ level, icon, label, value, title, onClick, buttonRef, expanded, children }: {
     level: Level;
     icon: ReactNode;
     label: string;
     value: ReactNode;
     title?: string;
+    /** When given, the pill becomes a button that opens a dialog. */
+    onClick?: () => void;
+    buttonRef?: React.Ref<HTMLButtonElement>;
+    expanded?: boolean;
     children?: ReactNode;
-}) => (
-    <div className={`pill pill-${level}`} title={title}>
-        <span className="pill-icon">{icon}</span>
-        <span className="pill-text">
-            <span className="pill-label">{label}</span>
-            <span className="pill-value">{value}</span>
-        </span>
-        {children}
-    </div>
-);
+}) => {
+    const inner = (
+        <>
+            <span className="pill-icon">{icon}</span>
+            <span className="pill-text">
+                <span className="pill-label">{label}</span>
+                <span className="pill-value">{value}</span>
+            </span>
+            {children}
+        </>
+    );
+
+    if (!onClick) return <div className={`pill pill-${level}`} title={title}>{inner}</div>;
+
+    return (
+        <button
+            type="button"
+            ref={buttonRef}
+            className={`pill pill-${level} pill-clickable`}
+            title={title}
+            onClick={onClick}
+            aria-haspopup="dialog"
+            aria-expanded={expanded}
+        >
+            {inner}
+        </button>
+    );
+};
 
 export interface LocalizationStatus {
     /** Mode label from rover_indoor_nav_manager ("Localized · lab", "Mapping", ...), if running. */
@@ -63,21 +87,21 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
     const ns = config.namespace;
     const now = useNow(1000);
     const latency = useLatency();
+    const diag = useDiagnostics();
+    const [diagOpen, setDiagOpen] = useState(false);
+    const diagPill = useRef<HTMLButtonElement>(null);
 
     const battery = useTopic<{ percentage: number; voltage: number }>(
         nsName(ns, "rover_battery/battery_status"), "sensor_msgs/msg/BatteryState", 1000);
     const charging = useTopic<{ charging: boolean }>(
         nsName(ns, "rover_battery/charging_status"), "rover_msgs/msg/ChargingStatus", 1000);
-    const diag = useTopic<{ status: { level: number }[] }>(
-        nsName(ns, "diagnostics_agg"), "diagnostic_msgs/msg/DiagnosticArray", 1000);
-
     const pct = fresh(battery.receivedAt, now) ? batteryPercent(battery.message?.percentage) : null;
     const isCharging = Boolean(fresh(charging.receivedAt, now) && charging.message?.charging);
     const batteryLevel: Level = pct === null ? "unknown" : pct < 15 ? "error" : pct < 30 ? "warn" : "ok";
     const BatteryIcon = isCharging ? BatteryCharging : batteryLevel === "error" ? BatteryWarning : Battery;
 
-    const diagLevel: Level = diag.message && fresh(diag.receivedAt, now)
-        ? worstDiagnosticLevel(diag.message.status)
+    const diagLevel: Level = fresh(diag.receivedAt, now)
+        ? worstDiagnosticLevel(diag.latestStatuses)
         : "unknown";
     const diagText: Record<Level, string> = { ok: "OK", warn: "Warning", error: "Error", stale: "Stale", unknown: "—" };
 
@@ -85,6 +109,7 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
     const q = localization.quality;
 
     return (
+        <>
         <header className="topbar">
             <div className="brand">
                 <img className="brand-logo" src="logo.png" alt="Mechatronics Academy" />
@@ -118,7 +143,8 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
                     title={safetySummary.detail}
                 />
                 <Pill level={diagLevel} icon={<Activity size={ICON} />} label="Diagnostics" value={diagText[diagLevel]}
-                    title="Worst level in diagnostics_agg" />
+                    title="Worst level in diagnostics_agg - click for details"
+                    onClick={() => setDiagOpen(true)} buttonRef={diagPill} expanded={diagOpen} />
                 <Pill
                     level={batteryLevel}
                     icon={<BatteryIcon size={ICON} />}
@@ -147,5 +173,9 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
             />
             </div>
         </header>
+        {diagOpen && (
+            <DiagnosticsModal onClose={() => { setDiagOpen(false); diagPill.current?.focus() }} />
+        )}
+        </>
     );
 };

@@ -61,10 +61,22 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
   Thresholds: Good ≥ 70 % matched and σ ≤ 0.35 m; Poor < 40 % or σ > 1 m.
 - **Top bar.** Shows:
   - safety (e-stop, latch, contactor, `motion_lock`);
-  - worst `diagnostics_agg` level;
+  - worst `diagnostics_agg` level - click it for the diagnostics popup;
   - battery and charging;
   - link latency (round trip through `/rosapi/get_time`);
   - the localization mode.
+
+- **Diagnostics popup.** Clicking the top bar's diagnostics level opens the same view as
+  Cockpit's **ROS 2 Diagnostics** page, over the same `<ns>/diagnostics_agg` topic:
+  - a timeline of the last 30 snapshots (~30 s at the aggregator's 1 Hz) - click one to
+    freeze the view on it, **Pause** / **Resume** to stop and restart the strip;
+  - **Errors** and **Warnings** cards listing the failing tasks by name, path and message
+    (a task that stopped reporting - STALE - counts as an error, as it does in Cockpit);
+  - **All Diagnostics**: the whole aggregated tree, expandable, with a detail pane showing
+    a task's path, hardware ID, level and key/value pairs.
+  The history keeps filling while the popup is closed, so the timeline is already full when
+  it opens. Cockpit's *Capture Diagnostics* has no equivalent here - it runs commands on the
+  robot through Cockpit's privileged API, so log capture stays on the Cockpit page.
 
 Tabs can be deep-linked: `#drive`, `#navigate`, `#facility`.
 
@@ -100,4 +112,8 @@ Icons come from [lucide-react](https://lucide.dev) (ISC).
 ## License
 
 Apache-2.0 (`LICENSE`). The vendored client in `src/ros/` is LGPL-2.1-or-later
-(`src/ros/COPYING.LESSER`, `src/ros/NOTICE.md`).
+(`src/ros/COPYING.LESSER`, `src/ros/NOTICE.md`), and so are `src/lib/diagnostics.ts` and
+`src/lib/valueLabels.ts`, whose tree building, leaf filtering and value labels are ported
+from [rover_cockpit_ros2_diagnostics](https://github.com/RaduPotlog/rover_cockpit_ros2_diagnostics)
+(itself a fork of clearpathrobotics/cockpit-ros2-diagnostics). Each file names its upstream
+in its header.

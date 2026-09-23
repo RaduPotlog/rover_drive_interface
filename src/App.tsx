@@ -13,6 +13,7 @@ import { isActive, NavPanel } from "./components/NavPanel";
 import { PendingBar } from "./components/PendingBar";
 import { PlacesPanel } from "./components/PlacesPanel";
 import { type LocalizationStatus, TopBar } from "./components/TopBar";
+import { DiagnosticsProvider } from "./hooks/useDiagnostics";
 import { useIndoorNav } from "./hooks/useIndoorNav";
 import { useLocalizationQuality } from "./hooks/useLocalizationQuality";
 import { useNavigation } from "./hooks/useNavigation";
@@ -244,7 +245,10 @@ export const App = ({ config }: { config: AppConfig }) => {
     return (
         <RosProvider>
             <AppContext.Provider value={state}>
-                <Workspace />
+                {/* Above Workspace so diagnostics history keeps filling while the popup is closed. */}
+                <DiagnosticsProvider>
+                    <Workspace />
+                </DiagnosticsProvider>
             </AppContext.Provider>
         </RosProvider>
     );
