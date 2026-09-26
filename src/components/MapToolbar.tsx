@@ -1,4 +1,4 @@
-import { Compass, Flag, Hand, Layers, LocateFixed, MapPin, Star } from "lucide-react";
+import { Compass, Flag, Hand, Layers, LocateFixed, MapPin, Navigation, Star } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { nextViewFrameMode, type ViewFrame, type ViewFrameMode } from "../lib/viewFrame";
@@ -19,13 +19,16 @@ const TOOLS: { id: MapTool; label: string; icon: ReactNode; title: string }[] = 
 ];
 
 export const MapToolbar = ({
-    tool, setTool, disabledTools, follow, setFollow, showCostmap, setShowCostmap, frameMode, setFrameMode, viewFrame,
+    tool, setTool, disabledTools, follow, setFollow, headingUp, setHeadingUp, showCostmap, setShowCostmap, frameMode,
+    setFrameMode, viewFrame,
 }: {
     tool: MapTool;
     setTool: (t: MapTool) => void;
     disabledTools: Partial<Record<MapTool, string>>;
     follow: boolean;
     setFollow: (v: boolean) => void;
+    headingUp: boolean;
+    setHeadingUp: (v: boolean) => void;
     showCostmap: boolean;
     setShowCostmap: (v: boolean) => void;
     frameMode: ViewFrameMode;
@@ -52,6 +55,11 @@ export const MapToolbar = ({
             <button className={`tool-btn ${follow ? "toggle-on" : ""}`} onClick={() => setFollow(!follow)}
                 title="Keep the rover centred" aria-pressed={follow}>
                 <LocateFixed size={16} /><span>Follow</span>
+            </button>
+            <button className={`tool-btn ${headingUp ? "toggle-on" : ""}`} onClick={() => setHeadingUp(!headingUp)}
+                title="Turn the map so the rover always points up (also follows the rover). Joystick forward is then screen up."
+                aria-pressed={headingUp}>
+                <Navigation size={16} /><span>Heading up</span>
             </button>
             <button className={`tool-btn ${showCostmap ? "toggle-on" : ""}`} onClick={() => setShowCostmap(!showCostmap)}
                 title="Overlay Nav 2's global costmap" aria-pressed={showCostmap}>

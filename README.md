@@ -54,6 +54,16 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
   - **Go to**, which calls rover_mission_manager's `set_mission`;
   - **Add place**;
   - **Stop**.
+  Rotation:
+  - ↺ / ↻ turn the map a quarter turn; **Shift + wheel** or a **two-finger twist** turns it
+    freely, snapping onto a quarter turn when within 5°;
+  - the arrow button is **Map up**: it points along the map's +Y axis and resets the rotation.
+    That is north only when the map frame is GPS-aligned; indoors (SLAM/AMCL) it is the
+    heading the rover had when the map was started;
+  - **Heading up** (next to Follow) turns the map so the rover always points up, and follows
+    it: joystick forward is then screen up;
+  - the angle is remembered per map, in this browser;
+  - poses drawn on a turned map (Set pose, Go to, Add place) keep the heading drawn on screen.
 - **Places.** Named poses per map, stored on the rover by rover_indoor_nav_manager:
   - **Go** to one;
   - rename or delete;

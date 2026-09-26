@@ -1,4 +1,4 @@
-import { Map as MapIcon, Maximize2, Minus, Plus } from "lucide-react";
+import { Map as MapIcon, Maximize2, Minus, Navigation2, Plus, RotateCcw, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useApp } from "../AppContext";
@@ -17,7 +17,21 @@ import {
 import { gridToRgba, MAP_LEGEND_COLORS, type MapSummary, type OccupancyGrid, summarizeMap } from "../lib/occupancyGrid";
 import type { LaserScan, Path, TFMessage } from "../lib/rosTypes";
 import { TfBuffer } from "../lib/tf";
-import { fitBounds, panBy, screenToWorld, type Size, type View, worldToScreen, zoomAt } from "../lib/view";
+import {
+    fitBounds,
+    headingUpRotation,
+    panBy,
+    QUARTER_TURN,
+    rotateAt,
+    screenToWorld,
+    type Size,
+    snapRotation,
+    type View,
+    viewMatrix,
+    visibleWorldBounds,
+    worldToScreen,
+    zoomAt,
+} from "../lib/view";
 import { resolveViewFrame, sameViewFrame, type ViewFrame, type ViewFrameMode } from "../lib/viewFrame";
 
 export type MapTool = "pan" | "setPose" | "goTo" | "place";
@@ -90,6 +104,10 @@ export interface MapViewProps {
     onMarkerClick?: (id: string) => void;
     showCostmap: boolean;
     follow: boolean;
+    /** With follow: turn the map so the rover's heading points up the screen. */
+    headingUp?: boolean;
+    /** Name the manual map rotation is remembered under (per viewer), e.g. the map's name. */
+    rotationKey?: string;
     onRobotPose?: (pose: Pose2D | null) => void;
     onMapFrame?: (frame: string | null) => void;
     /** Size and coverage of every map message (slam_toolbox grows it while mapping). */
@@ -106,8 +124,9 @@ export interface MapViewProps {
 }
 
 export const MapView = ({
-    tool, onPoseDrawn, pending, markers, onMarkerClick, showCostmap, follow, onRobotPose, onMapFrame,
-    onMapInfo, scanMatchEnabled = false, mapping = false, onScanMatch, frameMode = "auto", onViewFrame,
+    tool, onPoseDrawn, pending, markers, onMarkerClick, showCostmap, follow, headingUp = false, rotationKey = "default",
+    onRobotPose, onMapFrame, onMapInfo, scanMatchEnabled = false, mapping = false, onScanMatch, frameMode = "auto",
+    onViewFrame,
 }: MapViewProps) => {
     const { config } = useApp();
     const ns = config.namespace;
@@ -129,6 +148,10 @@ export const MapView = ({
     const [hasMap, setHasMap] = useState(false);
     const [hasPose, setHasPose] = useState(false);
     const [viewKind, setViewKind] = useState<ViewFrame["kind"]>("map");
+    // The map's rotation as last shown by the compass needle (the view itself lives in a ref).
+    const [shownRotation, setShownRotation] = useState(0);
+    const shownRotationRef = useRef(0);
+    const snapTimer = useRef<number | undefined>(undefined);
 
     // Read through a ref so the draw loop and intervals see a mode change without re-binding.
     const frameModeRef = useRef(frameMode);
@@ -217,9 +240,8 @@ export const MapView = ({
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.imageSmoothingEnabled = false;
-        // World (y up) -> screen (y down), in device pixels.
-        const k = v.scale * dpr;
-        ctx.setTransform(k, 0, 0, -k, (s.width / 2 - v.cx * v.scale) * dpr, (s.height / 2 + v.cy * v.scale) * dpr);
+        // World (y up) -> screen (y down, turned by the view's rotation), in device pixels.
+        ctx.setTransform(...viewMatrix(v, s, dpr));
         ctx.translate(o.x, o.y);
         ctx.rotate(normalizeAngle(toMap.theta + layer.origin.theta));
         // Image row 0 is the top of the grid (gridToRgba flips rows).
@@ -234,8 +256,8 @@ export const MapView = ({
         const s = size.current;
         const v = view.current;
         if (v.scale < 4) return; // lines would be closer than 4 px
-        const tl = screenToWorld(v, s, { x: 0, y: 0 });
-        const br = screenToWorld(v, s, { x: s.width, y: s.height });
+        // All four corners: once the map is turned, two of them no longer bound what is visible.
+        const b = visibleWorldBounds(v, s);
         const line = (x0: number, y0: number, x1: number, y1: number) => {
             const a = worldToScreen(v, s, { x: x0, y: y0 });
             const b = worldToScreen(v, s, { x: x1, y: y1 });
@@ -246,11 +268,11 @@ export const MapView = ({
         for (const major of [false, true]) {
             ctx.strokeStyle = major ? "rgba(255,255,255,0.11)" : "rgba(255,255,255,0.045)";
             ctx.beginPath();
-            for (let x = Math.floor(tl.x); x <= Math.ceil(br.x); x++) {
-                if ((x % 5 === 0) === major) line(x, br.y, x, tl.y);
+            for (let x = Math.floor(b.minX); x <= Math.ceil(b.maxX); x++) {
+                if ((x % 5 === 0) === major) line(x, b.minY, x, b.maxY);
             }
-            for (let y = Math.floor(br.y); y <= Math.ceil(tl.y); y++) {
-                if ((y % 5 === 0) === major) line(tl.x, y, br.x, y);
+            for (let y = Math.floor(b.minY); y <= Math.ceil(b.maxY); y++) {
+                if ((y % 5 === 0) === major) line(b.minX, y, b.maxX, y);
             }
             ctx.stroke();
         }
@@ -394,6 +416,13 @@ export const MapView = ({
                     view.current = { ...view.current, cx: robot.x, cy: robot.y };
                     dirty.current = true;
                 }
+                if (robot && headingUp) {
+                    const r = headingUpRotation(robot.theta);
+                    if (Math.abs(normalizeAngle(r - (view.current.rotation ?? 0))) > 1e-3) {
+                        view.current = { ...view.current, rotation: r };
+                        dirty.current = true;
+                    }
+                }
             }
             if (!fitted.current && size.current.width > 1) {
                 const l = mapLayer.current;
@@ -403,7 +432,7 @@ export const MapView = ({
                         minY: l.origin.y,
                         maxX: l.origin.x + l.width * l.resolution,
                         maxY: l.origin.y + l.height * l.resolution,
-                    });
+                    }, 0.05, view.current.rotation ?? 0);
                     fitted.current = true;
                     dirty.current = true;
                 } else {
@@ -419,12 +448,34 @@ export const MapView = ({
             if (dirty.current) {
                 dirty.current = false;
                 draw();
+                // The compass needle re-renders only when the angle moved visibly (~0.5 deg).
+                const r = view.current.rotation ?? 0;
+                if (Math.abs(normalizeAngle(r - shownRotationRef.current)) > 0.01) {
+                    shownRotationRef.current = r;
+                    setShownRotation(r);
+                }
             }
             raf = requestAnimationFrame(loop);
         };
         raf = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(raf);
-    }, [draw, follow]);
+    }, [draw, follow, headingUp]);
+
+    // Manual rotation is remembered per map (per viewer; heading-up is never stored). Restored
+    // when the map changes, and when heading-up is switched off.
+    const rotationStorageKey = `map.rotation.${rotationKey}`;
+    useEffect(() => {
+        if (headingUp) return;
+        let r = 0;
+        try {
+            const stored = Number(localStorage.getItem(rotationStorageKey));
+            if (Number.isFinite(stored)) r = snapRotation(stored);
+        } catch {
+            // per-viewer convenience only
+        }
+        view.current = { ...view.current, rotation: r };
+        dirty.current = true;
+    }, [rotationStorageKey, headingUp]);
 
     // Canvas size follows its container.
     useEffect(() => {
@@ -449,6 +500,44 @@ export const MapView = ({
     const local = (e: { clientX: number; clientY: number }) => {
         const rect = canvasRef.current!.getBoundingClientRect();
         return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+
+    const centre = () => ({ x: size.current.width / 2, y: size.current.height / 2 });
+
+    const saveRotation = () => {
+        try {
+            localStorage.setItem(rotationStorageKey, String(view.current.rotation ?? 0));
+        } catch {
+            // per-viewer convenience only
+        }
+    };
+
+    /** Turn the map by `dAngle` [rad, counter-clockwise] around `anchor`. Heading-up owns the angle. */
+    const rotateBy = (anchor: { x: number; y: number }, dAngle: number) => {
+        if (headingUp) return;
+        view.current = rotateAt(view.current, size.current, anchor, dAngle);
+        dirty.current = true;
+    };
+
+    /** Settle a gesture: snap onto a quarter turn when close, then remember the angle. */
+    const settleRotation = (anchor: { x: number; y: number }) => {
+        if (headingUp) return;
+        const r = view.current.rotation ?? 0;
+        rotateBy(anchor, snapRotation(r) - r);
+        saveRotation();
+    };
+
+    /** Rotate buttons: a quarter turn from the nearest quarter, so a free angle lands on the grid. */
+    const quarterTurn = (direction: 1 | -1) => {
+        const r = view.current.rotation ?? 0;
+        const target = Math.round(r / QUARTER_TURN) * QUARTER_TURN + direction * QUARTER_TURN;
+        rotateBy(centre(), normalizeAngle(target - r));
+        saveRotation();
+    };
+
+    const mapUp = () => {
+        rotateBy(centre(), -(view.current.rotation ?? 0));
+        saveRotation();
     };
 
     const hitMarker = (p: { x: number; y: number }) => markers.find((m) => {
@@ -486,14 +575,20 @@ export const MapView = ({
             const other = a === prev ? b : a;
             const before = Math.hypot(prev.x - other.x, prev.y - other.y);
             const after = Math.hypot(p.x - other.x, p.y - other.y);
+            const mid = { x: (p.x + other.x) / 2, y: (p.y + other.y) / 2 };
             if (before > 0) {
-                view.current = zoomAt(view.current, size.current, { x: (p.x + other.x) / 2, y: (p.y + other.y) / 2 }, after / before);
+                view.current = zoomAt(view.current, size.current, mid, after / before);
+                // Twist: the line between the fingers turned by this much (screen y is down, so a
+                // clockwise twist on screen is a negative turn of the map).
+                const turned = normalizeAngle(Math.atan2(p.y - other.y, p.x - other.x) - Math.atan2(prev.y - other.y, prev.x - other.x));
+                rotateBy(mid, -turned);
             }
         } else if (drag.current) {
             const d = drag.current;
             const dx = p.x - d.start.x;
             const dy = p.y - d.start.y;
-            if (Math.hypot(dx, dy) > 6) d.pose = { ...d.pose, theta: Math.atan2(-dy, dx) };
+            // Screen angle -> view-frame angle: undo the map's rotation.
+            if (Math.hypot(dx, dy) > 6) d.pose = { ...d.pose, theta: normalizeAngle(Math.atan2(-dy, dx) - (view.current.rotation ?? 0)) };
         } else {
             view.current = panBy(view.current, p.x - prev.x, p.y - prev.y);
         }
@@ -502,7 +597,9 @@ export const MapView = ({
     };
 
     const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+        const twisting = pointers.current.size === 2;
         pointers.current.delete(e.pointerId);
+        if (twisting) settleRotation(centre());
         const d = drag.current;
         drag.current = null;
         if (d) onPoseDrawn(d.tool, d.pose);
@@ -510,6 +607,15 @@ export const MapView = ({
     };
 
     const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+        if (e.shiftKey) {
+            // Shift + wheel turns the map. Some browsers report a shifted wheel as horizontal.
+            const delta = e.deltaY || e.deltaX;
+            const anchor = local(e);
+            rotateBy(anchor, -delta * 0.003);
+            window.clearTimeout(snapTimer.current);
+            snapTimer.current = window.setTimeout(() => settleRotation(anchor), 300);
+            return;
+        }
         view.current = zoomAt(view.current, size.current, local(e), Math.exp(-e.deltaY * 0.0015));
         dirty.current = true;
     };
@@ -574,6 +680,22 @@ export const MapView = ({
                 <button className="tool-btn" title="Zoom in" onClick={() => zoomCentre(1.4)}><Plus size={18} /></button>
                 <button className="tool-btn" title="Zoom out" onClick={() => zoomCentre(1 / 1.4)}><Minus size={18} /></button>
                 <button className="tool-btn" title={viewKind === "odom" ? "Centre on the rover" : "Fit map"} onClick={fit}><Maximize2 size={16} /></button>
+                <span className="map-zoom-sep" />
+                <button className="tool-btn" disabled={headingUp} onClick={() => quarterTurn(1)}
+                    title={headingUp ? "Heading up turns the map" : "Turn the map 90° left (Shift + wheel or two-finger twist turns freely)"}>
+                    <RotateCcw size={16} />
+                </button>
+                <button className="tool-btn" disabled={headingUp} onClick={() => quarterTurn(-1)}
+                    title={headingUp ? "Heading up turns the map" : "Turn the map 90° right"}>
+                    <RotateCw size={16} />
+                </button>
+                <button className={`tool-btn map-up-btn ${Math.abs(shownRotation) < 0.01 ? "map-up-idle" : ""}`}
+                    disabled={headingUp} onClick={mapUp} aria-label="Map up"
+                    title={headingUp
+                        ? "Heading up turns the map"
+                        : `Map up - the arrow is the map's +Y axis${Math.abs(shownRotation) < 0.01 ? "" : `, turned ${Math.round(Math.abs(shownRotation * 180) / Math.PI)}° ${shownRotation > 0 ? "left" : "right"}; click to reset`}. It is north only when the map is GPS-aligned.`}>
+                    <Navigation2 size={16} style={{ transform: `rotate(${-shownRotation}rad)` }} />
+                </button>
             </div>
         </div>
     );

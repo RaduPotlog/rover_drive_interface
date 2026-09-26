@@ -63,7 +63,17 @@ const Workspace = () => {
     const [busy, setBusy] = useState(false);
     const [pendingError, setPendingError] = useState<string | null>(null);
     const [stopError, setStopError] = useState<string | null>(null);
-    const [follow, setFollow] = useState(false);
+    const [follow, setFollowState] = useState(false);
+    const [headingUp, setHeadingUpState] = useState(false);
+    // Heading up needs the rover centred, so it brings Follow with it; dropping Follow ends it.
+    const setFollow = (v: boolean) => {
+        setFollowState(v);
+        if (!v) setHeadingUpState(false);
+    };
+    const setHeadingUp = (v: boolean) => {
+        setHeadingUpState(v);
+        if (v) setFollowState(true);
+    };
     const [showCostmap, setShowCostmap] = useState(false);
     const [robotPose, setRobotPose] = useState<Pose2D | null>(null);
     const [mapFrame, setMapFrame] = useState<string | null>(null);
@@ -205,6 +215,8 @@ const Workspace = () => {
                                 onMarkerClick={(id) => { setHighlighted(id); setTab("navigate") }}
                                 showCostmap={showCostmap}
                                 follow={follow}
+                                headingUp={headingUp}
+                                rotationKey={indoor.state?.map_name || "default"}
                                 onRobotPose={setRobotPose}
                                 onMapFrame={setMapFrame}
                                 onMapInfo={setMapInfo}
@@ -220,6 +232,8 @@ const Workspace = () => {
                                 disabledTools={disabledTools}
                                 follow={follow}
                                 setFollow={setFollow}
+                                headingUp={headingUp}
+                                setHeadingUp={setHeadingUp}
                                 showCostmap={showCostmap}
                                 setShowCostmap={setShowCostmap}
                                 frameMode={frameMode}
