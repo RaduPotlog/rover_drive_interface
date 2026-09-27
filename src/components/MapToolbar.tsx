@@ -1,4 +1,4 @@
-import { Compass, Flag, Hand, Layers, LocateFixed, MapPin, Navigation, Star } from "lucide-react";
+import { Compass, Flag, Hand, Layers, LocateFixed, MapPin, Navigation, Ruler, Star } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { nextViewFrameMode, type ViewFrame, type ViewFrameMode } from "../lib/viewFrame";
@@ -16,6 +16,7 @@ const TOOLS: { id: MapTool; label: string; icon: ReactNode; title: string }[] = 
     { id: "setPose", label: "Set pose", icon: <MapPin size={16} />, title: "Click where the rover is and drag its heading (re-localize AMCL)" },
     { id: "goTo", label: "Go to", icon: <Flag size={16} />, title: "Click a destination and drag the final heading" },
     { id: "place", label: "Add place", icon: <Star size={16} />, title: "Click and drag to save a named place" },
+    { id: "measure", label: "Measure", icon: <Ruler size={16} />, title: "Drag between two points to measure the distance (Esc clears)" },
 ];
 
 export const MapToolbar = ({

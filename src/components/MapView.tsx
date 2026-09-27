@@ -16,6 +16,7 @@ import {
 } from "../lib/locQuality";
 import { gridToRgba, MAP_LEGEND_COLORS, type MapSummary, type OccupancyGrid, summarizeMap } from "../lib/occupancyGrid";
 import type { LaserScan, Path, TFMessage } from "../lib/rosTypes";
+import { formatDistance, formatRulerLabel, measure, niceScaleLength } from "../lib/ruler";
 import { TfBuffer } from "../lib/tf";
 import {
     fitBounds,
@@ -34,7 +35,7 @@ import {
 } from "../lib/view";
 import { resolveViewFrame, sameViewFrame, type ViewFrame, type ViewFrameMode } from "../lib/viewFrame";
 
-export type MapTool = "pan" | "setPose" | "goTo" | "place";
+export type MapTool = "pan" | "setPose" | "goTo" | "place" | "measure";
 
 export interface MapMarker {
     id: string;
@@ -65,6 +66,7 @@ const TOOL_COLOR: Record<MapTool, string> = {
     setPose: "#3aa0ff",
     goTo: "#2fbf71",
     place: "#c38cff",
+    measure: "#fca800",
 };
 
 const toLayer = (grid: OccupancyGrid, palette: "map" | "costmap"): GridLayer => {
@@ -147,6 +149,9 @@ export const MapView = ({
     const plan = useRef<Path | null>(null);
     const drag = useRef<{ tool: MapTool; start: { x: number; y: number }; pose: Pose2D } | null>(null);
     const pointers = useRef(new Map<number, { x: number; y: number }>());
+    /** Measure tool: the segment in view-frame metres, so it stays put on the map while panning. */
+    const ruler = useRef<{ a: { x: number; y: number }; b: { x: number; y: number }; dragging: boolean } | null>(null);
+    const [scaleBar, setScaleBar] = useState<{ meters: number; px: number }>({ meters: 2, px: 80 });
     const [hasMap, setHasMap] = useState(false);
     const [hasPose, setHasPose] = useState(false);
     const [viewKind, setViewKind] = useState<ViewFrame["kind"]>("map");
@@ -312,6 +317,56 @@ export const MapView = ({
         ctx.fill();
     };
 
+    /** Measured segment with end ticks and a "3.42 m · 37° · ±5 cm" label at its middle. */
+    const drawRuler = (ctx: CanvasRenderingContext2D, a: { x: number; y: number }, b: { x: number; y: number }) => {
+        const s = size.current;
+        const v = view.current;
+        const sa = worldToScreen(v, s, a);
+        const sb = worldToScreen(v, s, b);
+        const len = Math.hypot(sb.x - sa.x, sb.y - sa.y);
+        const color = TOOL_COLOR.measure;
+        ctx.save();
+        ctx.lineCap = "round";
+        ctx.strokeStyle = "rgba(15,18,22,0.8)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(sa.x, sa.y);
+        ctx.lineTo(sb.x, sb.y);
+        ctx.stroke();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Ticks across the ends (a dot while the two ends still coincide).
+        const nx = len > 0 ? -(sb.y - sa.y) / len : 0;
+        const ny = len > 0 ? (sb.x - sa.x) / len : 0;
+        ctx.fillStyle = color;
+        for (const p of [sa, sb]) {
+            if (len > 0) {
+                ctx.beginPath();
+                ctx.moveTo(p.x - nx * 7, p.y - ny * 7);
+                ctx.lineTo(p.x + nx * 7, p.y + ny * 7);
+                ctx.stroke();
+            }
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 2.5, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+        const label = formatRulerLabel(measure(a, b), mapLayer.current?.resolution);
+        ctx.font = "600 12px system-ui, sans-serif";
+        const w = ctx.measureText(label).width + 10;
+        const mx = (sa.x + sb.x) / 2;
+        const my = (sa.y + sb.y) / 2;
+        // Beside the line, on the side of its normal that points up the screen.
+        const side = ny > 0 ? -1 : 1;
+        const lx = Math.min(Math.max(mx + side * nx * 16 - w / 2, 4), s.width - w - 4);
+        const ly = Math.min(Math.max(my + side * ny * 16 - 9, 4), s.height - 22);
+        ctx.fillStyle = "rgba(15,18,22,0.85)";
+        ctx.fillRect(lx, ly, w, 18);
+        ctx.fillStyle = color;
+        ctx.fillText(label, lx + 5, ly + 13);
+        ctx.restore();
+    };
+
     const draw = useCallback(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -406,6 +461,11 @@ export const MapView = ({
         const d = drag.current;
         if (d) drawArrow(ctx, d.pose, TOOL_COLOR[d.tool], 1.0);
         else if (pending) drawArrow(ctx, pending.pose, TOOL_COLOR[pending.tool], 1.0);
+
+        if (ruler.current) drawRuler(ctx, ruler.current.a, ruler.current.b);
+
+        const bar = niceScaleLength(v.scale);
+        setScaleBar((prev) => (prev.meters === bar.meters && Math.round(prev.px) === Math.round(bar.px) ? prev : bar));
     }, [markers, pending, ns, scanMatchEnabled, mapping]); // draw re-binds when the props it reads change
 
     // Animation loop: redraw only when something changed.
@@ -499,6 +559,23 @@ export const MapView = ({
     }, []);
 
     // --- interaction -----------------------------------------------------------------
+    useEffect(() => {
+        if (tool !== "measure") {
+            if (ruler.current) {
+                ruler.current = null;
+                dirty.current = true;
+            }
+            return;
+        }
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== "Escape" || !ruler.current) return;
+            ruler.current = null;
+            dirty.current = true;
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [tool]);
+
     const local = (e: { clientX: number; clientY: number }) => {
         const rect = canvasRef.current!.getBoundingClientRect();
         return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -555,6 +632,13 @@ export const MapView = ({
         pointers.current.set(e.pointerId, p);
         if (pointers.current.size > 1) {
             drag.current = null; // second finger: pinch, not a pose
+            if (ruler.current?.dragging) ruler.current = null;
+            return;
+        }
+        if (tool === "measure") {
+            const w = screenToWorld(view.current, size.current, p);
+            ruler.current = { a: w, b: w, dragging: true };
+            dirty.current = true;
             return;
         }
         if (tool === "pan") {
@@ -585,6 +669,8 @@ export const MapView = ({
                 const turned = normalizeAngle(Math.atan2(p.y - other.y, p.x - other.x) - Math.atan2(prev.y - other.y, prev.x - other.x));
                 rotateBy(mid, -turned);
             }
+        } else if (ruler.current?.dragging) {
+            ruler.current = { ...ruler.current, b: screenToWorld(view.current, size.current, p) };
         } else if (drag.current) {
             const d = drag.current;
             const dx = p.x - d.start.x;
@@ -602,6 +688,8 @@ export const MapView = ({
         const twisting = pointers.current.size === 2;
         pointers.current.delete(e.pointerId);
         if (twisting) settleRotation(centre());
+        // The measured segment stays on the map until the next measurement, Escape or another tool.
+        if (ruler.current?.dragging) ruler.current = { ...ruler.current, dragging: false };
         const d = drag.current;
         drag.current = null;
         if (d) onPoseDrawn(d.tool, d.pose);
@@ -648,36 +736,42 @@ export const MapView = ({
                     <div>Waiting for a map on {nsName(ns, "map")}…</div>
                 </div>
             )}
-            {viewKind === "odom" && (
-                <div className="map-legend map-odom-badge" title="The rover is drawn from wheel/IMU odometry only (no map -> odom transform). Position drifts over distance; the grid is 1 m.">
-                    <span><span className="legend-dot" style={{ background: "#f5b400" }} />Odom frame - no map localization, drift accumulates · grid 1 m</span>
+            <div className="map-bottom-left">
+                <div className="map-scale" title="Scale: the bar is this long on the map" aria-label={`Scale bar ${formatDistance(scaleBar.meters)}`}>
+                    <span className="map-scale-bar" style={{ width: `${scaleBar.px}px` }} />
+                    <span>{formatDistance(scaleBar.meters)}</span>
                 </div>
-            )}
-            {viewKind === "map" && hasMap && scanMatchEnabled && mapping && (
-                <div className="map-legend" title="Lidar points on a mapped wall are green, in unmapped area cyan, and on mapped free space red: there the scan and the map disagree">
-                    <span><span className="legend-dot" style={{ background: MAP_LEGEND_COLORS.free }} />Free</span>
-                    <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.wall }} />Wall</span>
-                    <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.unknown }} />Unexplored</span>
-                    <span className="legend-sep" />
-                    <span><span className="legend-dot" style={{ background: POINT_COLOR.wall }} />Match</span>
-                    <span><span className="legend-dot" style={{ background: POINT_COLOR.new }} />New</span>
-                    <span><span className="legend-dot" style={{ background: POINT_COLOR.conflict }} />Conflict</span>
-                </div>
-            )}
-            {viewKind === "map" && hasMap && scanMatchEnabled && !mapping && (
-                <div className="map-legend" title="Lidar points on a wall of the saved map are green; red points hit free or unknown space">
-                    <span><span className="legend-dot" style={{ background: "#22c55e" }} />Scan matches map</span>
-                    <span><span className="legend-dot" style={{ background: "#ef4444" }} />No match</span>
-                </div>
-            )}
-            {viewKind === "map" && hasMap && !scanMatchEnabled && (
-                <div className="map-legend" title="Gray is map area the lidar has not seen yet; it fills in as the rover drives">
-                    <span><span className="legend-dot" style={{ background: MAP_LEGEND_COLORS.free }} />Free</span>
-                    <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.wall }} />Wall</span>
-                    <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.unknown }} />Unexplored</span>
-                    <span><span className="legend-dot" style={{ background: SCAN_COLOR }} />Lidar</span>
-                </div>
-            )}
+                {viewKind === "odom" && (
+                    <div className="map-legend map-odom-badge" title="The rover is drawn from wheel/IMU odometry only (no map -> odom transform). Position drifts over distance; the grid is 1 m.">
+                        <span><span className="legend-dot" style={{ background: "#f5b400" }} />Odom frame - no map localization, drift accumulates · grid 1 m</span>
+                    </div>
+                )}
+                {viewKind === "map" && hasMap && scanMatchEnabled && mapping && (
+                    <div className="map-legend" title="Lidar points on a mapped wall are green, in unmapped area cyan, and on mapped free space red: there the scan and the map disagree">
+                        <span><span className="legend-dot" style={{ background: MAP_LEGEND_COLORS.free }} />Free</span>
+                        <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.wall }} />Wall</span>
+                        <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.unknown }} />Unexplored</span>
+                        <span className="legend-sep" />
+                        <span><span className="legend-dot" style={{ background: POINT_COLOR.wall }} />Match</span>
+                        <span><span className="legend-dot" style={{ background: POINT_COLOR.new }} />New</span>
+                        <span><span className="legend-dot" style={{ background: POINT_COLOR.conflict }} />Conflict</span>
+                    </div>
+                )}
+                {viewKind === "map" && hasMap && scanMatchEnabled && !mapping && (
+                    <div className="map-legend" title="Lidar points on a wall of the saved map are green; red points hit free or unknown space">
+                        <span><span className="legend-dot" style={{ background: "#22c55e" }} />Scan matches map</span>
+                        <span><span className="legend-dot" style={{ background: "#ef4444" }} />No match</span>
+                    </div>
+                )}
+                {viewKind === "map" && hasMap && !scanMatchEnabled && (
+                    <div className="map-legend" title="Gray is map area the lidar has not seen yet; it fills in as the rover drives">
+                        <span><span className="legend-dot" style={{ background: MAP_LEGEND_COLORS.free }} />Free</span>
+                        <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.wall }} />Wall</span>
+                        <span><span className="legend-dot legend-dot-outline" style={{ background: MAP_LEGEND_COLORS.unknown }} />Unexplored</span>
+                        <span><span className="legend-dot" style={{ background: SCAN_COLOR }} />Lidar</span>
+                    </div>
+                )}
+            </div>
             <div className="floating map-zoom">
                 <button className="tool-btn" title="Zoom in" onClick={() => zoomCentre(1.4)}><Plus size={18} /></button>
                 <button className="tool-btn" title="Zoom out" onClick={() => zoomCentre(1 / 1.4)}><Minus size={18} /></button>

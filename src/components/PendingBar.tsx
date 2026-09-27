@@ -9,6 +9,7 @@ const ICONS: Record<MapTool, ReactNode> = {
     setPose: <MapPin size={16} />,
     goTo: <Flag size={16} />,
     place: <Star size={16} />,
+    measure: null,
 };
 
 const TITLES: Record<MapTool, string> = {
@@ -16,6 +17,7 @@ const TITLES: Record<MapTool, string> = {
     setPose: "Set the rover's pose here?",
     goTo: "Send the rover here?",
     place: "Save this place",
+    measure: "",
 };
 
 export const PendingBar = ({ tool, pose, busy, error, onConfirm, onCancel }: {

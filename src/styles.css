@@ -235,7 +235,7 @@ svg { flex-shrink: 0; }
 .map-view { position: absolute; inset: 0; overflow: hidden; }
 .map-view canvas { display: block; touch-action: none; }
 .map-tool-pan canvas { cursor: grab; }
-.map-tool-setPose canvas, .map-tool-goTo canvas, .map-tool-place canvas { cursor: crosshair; }
+.map-tool-setPose canvas, .map-tool-goTo canvas, .map-tool-place canvas, .map-tool-measure canvas { cursor: crosshair; }
 .map-empty {
     position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 8px;
     color: var(--muted); pointer-events: none; text-align: center;
@@ -289,15 +289,27 @@ svg { flex-shrink: 0; }
     .map-drive { left: 12px; width: auto; }
     .map-drive .hint, .map-drive-readout { display: none; }
 }
+/* scale bar above whichever legend is showing */
+.map-bottom-left {
+    position: absolute; left: 12px; bottom: 12px; display: flex; flex-direction: column; align-items: flex-start;
+    gap: 8px; max-width: calc(100% - 300px); pointer-events: none;
+}
+.map-bottom-left > * { pointer-events: auto; }
+.map-scale {
+    display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 10px;
+    font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted);
+    background: rgba(21, 26, 34, 0.9); border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.map-scale-bar { height: 6px; border: 2px solid var(--text); border-top: none; }
 .map-legend {
-    position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 12px;
+    display: flex; align-items: center; gap: 12px;
     padding: 8px 12px; border-radius: 10px; font-size: 12px; color: var(--muted);
     background: rgba(21, 26, 34, 0.9); border: 1px solid var(--border); box-shadow: var(--shadow);
 }
 .legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 .legend-dot-outline { box-shadow: 0 0 0 1px var(--border-strong); }
 .legend-sep { width: 1px; align-self: stretch; background: var(--border-strong); }
-.map-legend { flex-wrap: wrap; max-width: calc(100% - 300px); }
+.map-legend { flex-wrap: wrap; }
 .pending-bar {
     position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 12px;
     align-items: center; flex-wrap: wrap; max-width: calc(100% - 32px);
