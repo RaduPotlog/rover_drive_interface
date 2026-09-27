@@ -52,9 +52,11 @@ interface GridLayer {
     frame: string;
 }
 
-const FOOTPRINT = 0.98; // m, square, padded Nav 2 footprint (bringup.launch.py bounding box)
-const ROVER_LENGTH = 0.839; // m, outer wheel edges: wheelbase + 2 * wheel_radius (wheel_01.yaml)
-const ROVER_WIDTH = 0.734; // m, wheel_separation + wheel_width
+// Padded Nav 2 footprint (rover_navigation bringup.launch.py bounding box): outline + 2 * 0.04.
+const FOOTPRINT_LENGTH = 0.913; // m
+const FOOTPRINT_WIDTH = 0.803; // m
+const ROVER_LENGTH = 0.833; // m, outer wheel edges: wheelbase + 2 * wheel_radius (wheel_01.yaml)
+const ROVER_WIDTH = 0.723; // m, wheel_separation + wheel_width
 const ROVER_COLOR = "#3b82f6";
 const SCAN_COLOR = "#38bdf8"; // live lidar when there is no saved map to match against
 const POINT_COLOR: Record<PointMatch, string> = { wall: "#22c55e", new: SCAN_COLOR, conflict: "#ef4444" };
@@ -395,7 +397,7 @@ export const MapView = ({
                 ctx.stroke();
             };
             // Nav 2 footprint (padded), then the rover's real outline inside it.
-            drawBox(FOOTPRINT / 2, FOOTPRINT / 2, "rgba(245, 180, 0, 0.25)", "#f5b400");
+            drawBox(FOOTPRINT_LENGTH / 2, FOOTPRINT_WIDTH / 2, "rgba(245, 180, 0, 0.25)", "#f5b400");
             drawBox(ROVER_LENGTH / 2, ROVER_WIDTH / 2, "rgba(59, 130, 246, 0.25)", ROVER_COLOR);
             drawArrow(ctx, robot, "#f5b400", 0.7);
         }
