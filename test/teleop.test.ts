@@ -33,10 +33,10 @@ describe("teleop", () => {
         expect(t.angular).toBe(0);
     });
 
-    it("deadman: publishes only in manual, connected, visible and focused", () => {
-        const base = { manual: true, connected: true, visible: true, focused: true };
+    it("deadman: publishes only when armed, connected, visible and focused", () => {
+        const base = { armed: true, connected: true, visible: true, focused: true };
         expect(mayPublish(base)).toBe(true);
-        expect(mayPublish({ ...base, manual: false })).toBe(false);
+        expect(mayPublish({ ...base, armed: false })).toBe(false);
         expect(mayPublish({ ...base, connected: false })).toBe(false);
         expect(mayPublish({ ...base, visible: false })).toBe(false);
         expect(mayPublish({ ...base, focused: false })).toBe(false);

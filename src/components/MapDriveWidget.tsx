@@ -7,7 +7,7 @@ import { collapsedAfterModeChange, driveWidgetState } from "../lib/driveWidget";
 import { nsName } from "../lib/namespace";
 import { needsRecovery, safetyBadge, type SafetySummary } from "../lib/status";
 import { useRos } from "../ros/RosProvider";
-import { DriveModeSwitch, SpeedPresets } from "./DrivePanel";
+import { DriveModeSelector, GuardChip, JoystickSwitch, SpeedPresets } from "./DrivePanel";
 import { RESET_E_STOP_CONFIRM, RESET_LATCH_CONFIRM } from "./EStopPanel";
 import { Joystick } from "./Joystick";
 import { TriggerButton } from "./TriggerButton";
@@ -54,10 +54,10 @@ export const MapDriveWidget = ({ tab, mapping, safety }: { tab: string; mapping:
 
     if (state === "collapsed") {
         return (
-            <button className={`floating map-drive-pill ${blocked ? "alert" : teleop.manual ? "manual" : ""}`}
+            <button className={`floating map-drive-pill ${blocked ? "alert" : teleop.armed ? "manual" : ""}`}
                 onClick={() => setCollapsed(false)} title={blocked ? safety.detail : "Show the drive joystick"}>
                 {blocked ? <OctagonX size={16} /> : <Gamepad2 size={16} />}
-                Drive{blocked ? ` · ${safetyBadge(safety)}` : teleop.manual ? " · MANUAL" : ""}
+                Drive{blocked ? ` · ${safetyBadge(safety)}` : teleop.armed ? " · ON" : ""}
             </button>
         );
     }
@@ -66,11 +66,13 @@ export const MapDriveWidget = ({ tab, mapping, safety }: { tab: string; mapping:
         <section className="map-drive" aria-label="Map drive">
             <div className="map-drive-head">
                 <span className="card-title"><Gamepad2 size={15} />Drive</span>
+                <GuardChip />
                 <button className="tool-btn" onClick={() => setCollapsed(true)} title="Hide" aria-label="Hide the drive joystick">
                     <ChevronDown size={16} />
                 </button>
             </div>
-            <DriveModeSwitch />
+            <DriveModeSelector compact />
+            <JoystickSwitch />
             <SpeedPresets />
             <div className="map-drive-stick">
                 <Joystick size={150} disabled={!teleop.publishing} onChange={teleop.setStick} />

@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { useApp } from "../AppContext";
+import { DRIVE_MODE, DRIVE_MODE_LABEL, type DriveModeId, GUARD } from "../lib/driveMode";
 import { firstPad, padToStick } from "../lib/gamepad";
 import { nsFrame, nsName } from "../lib/namespace";
 import {
@@ -18,6 +19,7 @@ import {
 } from "../lib/teleop";
 import { Topic } from "../ros";
 import { useRos } from "../ros/RosProvider";
+import { useDriveMode } from "./useDriveMode";
 import { usePageActive } from "./usePageActive";
 
 const PUBLISH_PERIOD_MS = 100; // 10 Hz: 3 periods per twist_mux's 0.3 s timeout
@@ -32,9 +34,14 @@ const loadPreset = () => {
 };
 
 export interface Teleop {
-    manual: boolean;
-    /** The loop is publishing: Manual, bridge up, page visible and focused. */
+    /** This browser's joystick is on. */
+    armed: boolean;
+    /** The loop is publishing: armed, bridge up, page visible and focused. */
     publishing: boolean;
+    /** The rover's driving mode, null while unknown. */
+    mode: DriveModeId | null;
+    /** The mode's collision monitor is holding the rover (obstacle, or no lidar data). */
+    guardStopped: boolean;
     focused: boolean;
     preset: SpeedPreset;
     setPresetId: (id: string) => void;
@@ -53,17 +60,20 @@ export const useTeleop = (): Teleop => {
 };
 
 /**
- * Manual driving, owned above the tabs so it keeps running whichever tab or joystick is on
- * screen. In NEUTRAL nothing is published and Nav 2 (twist_mux priority 5) or the RC
- * transmitter drive as usual. In MANUAL it publishes on its own twist_mux input,
- * teleop_driver_interface_cmd_vel_stamped (priority 8), at 10 Hz while the stick is deflected.
- * Releasing the stick sends a short burst of zeros (~300 ms) and then nothing, as the RC teleop
- * does, so Nav 2 can drive again after twist_mux's timeout. The RC transmitter (110) and
- * Foxglove (100) override it. On the rover, rover_command_freshness_node drops commands that
- * arrive late (held through a Wi-Fi stall), judged by header.stamp.
+ * Joystick driving, owned above the tabs so it keeps running whichever tab or joystick is on
+ * screen. While the joystick is off nothing is published. While it is on, it publishes
+ * teleop_web_cmd_vel_stamped at 10 Hz while the stick is deflected, and rover_drive_mode routes
+ * that by the rover's driving mode: straight to the platform in MANUAL, through the lidar
+ * collision monitor in ASSISTED, and in AUTOMATIC a moving stick takes over (the rover switches
+ * to ASSISTED and cancels the mission). Either way it ends on twist_mux's web-teleop input
+ * (priority 8). Releasing the stick sends a short burst of zeros (~300 ms) and then nothing, as
+ * the RC teleop does. The RC transmitter (110) and Foxglove (100) override it. On the rover,
+ * rover_command_freshness_node drops commands that arrive late (held through a Wi-Fi stall),
+ * judged by header.stamp.
  */
 export const TeleopProvider = ({ children }: { children: ReactNode }) => {
-    const { config, driveMode, setDriveMode } = useApp();
+    const { config, armed, setArmed } = useApp();
+    const driveMode = useDriveMode();
     const { ros, connected, session } = useRos();
     const { visible, focused } = usePageActive();
     const [presetId, setPresetId] = useState(loadPreset);
@@ -71,17 +81,19 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
     const [padActive, setPadActive] = useState(false);
     const stick = useRef<StickInput>({ x: 0, y: 0 });
 
-    const manual = driveMode === "manual";
-    const publishing = mayPublish({ manual, connected, visible, focused });
+    const publishing = mayPublish({ armed, connected, visible, focused });
+    const guard = driveMode.message?.guard;
+    const guardStopped = driveMode.mode !== DRIVE_MODE.MANUAL &&
+        (guard === GUARD.STOPPED || guard === GUARD.NO_DATA);
     const preset = SPEED_PRESETS.find((p) => p.id === presetId) ?? SPEED_PRESETS[1];
     // Read by the publish loop, so changing speed does not tear the publisher down.
     const fraction = useRef(preset.fraction);
     fraction.current = preset.fraction;
 
-    // Losing the page or the bridge drops back to Neutral: the operator must re-arm on purpose.
+    // Losing the page or the bridge turns the joystick off: the operator must re-arm on purpose.
     useEffect(() => {
-        if (manual && (!connected || !visible)) setDriveMode("neutral");
-    }, [manual, connected, visible, setDriveMode]);
+        if (armed && (!connected || !visible)) setArmed(false);
+    }, [armed, connected, visible, setArmed]);
 
     useEffect(() => {
         try {
@@ -98,7 +110,7 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
         }
         const topic = new Topic<ReturnType<typeof twistStamped>>({
             ros,
-            name: nsName(config.namespace, "teleop_driver_interface_cmd_vel_stamped"),
+            name: nsName(config.namespace, "teleop_web_cmd_vel_stamped"),
             messageType: "geometry_msgs/msg/TwistStamped",
         });
         const frame = nsFrame(config.namespace, "base_link");
@@ -111,7 +123,7 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
             expoAngular: config.expoAngular,
         };
 
-        // Starts spent, so arming Manual with the stick centred publishes nothing.
+        // Starts spent, so arming with the stick centred publishes nothing.
         let zerosSent = ZERO_BURST_TICKS;
         const tick = () => {
             const padStick = padToStick(firstPad());
@@ -136,9 +148,10 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
 
     const setStick = useCallback((s: StickInput) => { stick.current = s }, []);
 
+    const mode = driveMode.mode;
     const value = useMemo<Teleop>(() => ({
-        manual, publishing, focused, preset, setPresetId, setStick, twist, padActive,
-    }), [manual, publishing, focused, preset, setStick, twist, padActive]);
+        armed, publishing, mode, guardStopped, focused, preset, setPresetId, setStick, twist, padActive,
+    }), [armed, publishing, mode, guardStopped, focused, preset, setStick, twist, padActive]);
 
     return <TeleopContext.Provider value={value}>{children}</TeleopContext.Provider>;
 };
@@ -147,10 +160,16 @@ export const TeleopProvider = ({ children }: { children: ReactNode }) => {
 export const teleopHint = (t: Teleop, connected: boolean): string =>
     !connected
         ? "Not connected to the rover."
-        : !t.manual
-            ? "Neutral: the web UI is not driving. Select Manual to take control."
-            : !t.focused
-                ? "Paused - click the page to resume driving."
-                : t.padActive
-                    ? "Gamepad driving (hold L1/LB)."
-                    : "Drag the stick, or hold L1/LB on a gamepad.";
+        : t.mode === null
+            ? "Driving mode unknown - rover_drive_mode is not running, so the joystick reaches nothing."
+            : !t.armed
+                ? `Joystick off. Turn it on to drive (${DRIVE_MODE_LABEL[t.mode]}).`
+                : !t.focused
+                    ? "Paused - click the page to resume driving."
+                    : t.mode === DRIVE_MODE.AUTOMATIC
+                        ? "Automatic: moving the stick takes over and cancels the mission."
+                        : t.guardStopped
+                            ? "The lidar guard is holding the rover - steer away, or switch to Manual."
+                            : t.padActive
+                                ? "Gamepad driving (hold L1/LB)."
+                                : "Drag the stick, or hold L1/LB on a gamepad.";

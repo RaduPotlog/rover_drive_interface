@@ -164,6 +164,8 @@ svg { flex-shrink: 0; }
 .segmented-sm button { padding: 7px 4px; font-size: 13px; }
 
 /* drive */
+.drive-mode { margin-bottom: 10px; }
+.drive-mode .hint { margin-top: 6px; }
 .speed-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .speed-row .segmented { flex: 1; }
 .speed-icon { color: var(--muted); }
@@ -270,7 +272,8 @@ svg { flex-shrink: 0; }
     padding: 12px; border-radius: var(--radius); background: rgba(21, 26, 34, 0.94);
     border: 1px solid var(--border); box-shadow: var(--shadow); backdrop-filter: blur(6px);
 }
-.map-drive-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.map-drive-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.map-drive-head .card-title { margin-right: auto; }
 .map-drive-head .tool-btn { padding: 4px 6px; }
 .map-drive .speed-row { margin-top: 10px; }
 .map-drive-stick { display: flex; justify-content: center; margin-top: 12px; }

@@ -2,6 +2,7 @@ import { type ReactNode, useRef, useState } from "react";
 import {
     Activity,
     Battery,
+    Bot,
     BatteryCharging,
     BatteryWarning,
     CircuitBoard,
@@ -18,8 +19,10 @@ import {
 import { useApp } from "../AppContext";
 import { useAuxIo } from "../hooks/useAuxIo";
 import { useDiagnostics } from "../hooks/useDiagnostics";
+import { useDriveMode } from "../hooks/useDriveMode";
 import { useLatency } from "../hooks/useLatency";
 import { useNow, useTopic } from "../hooks/useTopic";
+import { DRIVE_MODE, DRIVE_MODE_DETAIL, DRIVE_MODE_LABEL, guardStatus } from "../lib/driveMode";
 import type { Quality } from "../lib/locQuality";
 import { nsName } from "../lib/namespace";
 import { batteryPercent, type Level, type SafetySummary, worstDiagnosticLevel } from "../lib/status";
@@ -85,7 +88,8 @@ export interface LocalizationStatus {
 const QUALITY_LEVEL: Record<Quality["level"], Level> = { good: "ok", fair: "warn", poor: "error", unknown: "unknown" };
 
 export const TopBar = ({ localization, safety: safetySummary }: { localization: LocalizationStatus; safety: SafetySummary }) => {
-    const { config, driveMode } = useApp();
+    const { config, armed } = useApp();
+    const driveMode = useDriveMode();
     const { connected } = useRos();
     const ns = config.namespace;
     const now = useNow(1000);
@@ -123,10 +127,18 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
                     <span className="brand-name">{config.robotName}</span>
                     <span className="brand-sub">Drive interface</span>
                 </div>
-                <span className={`mode-badge ${driveMode === "manual" ? "manual" : ""}`}
-                    title={driveMode === "manual" ? "Manual driving - the web UI drives unless the RC transmitter or Foxglove is active" : "Neutral - the web UI is not driving"}>
-                    {driveMode === "manual" ? <Gamepad2 size={14} /> : <Hand size={14} />}
-                    {driveMode === "manual" ? "MANUAL" : "NEUTRAL"}
+                <span className={`mode-badge ${driveMode.mode === DRIVE_MODE.MANUAL ? "manual" : ""}`}
+                    title={driveMode.mode === null
+                        ? "Driving mode unknown - rover_drive_mode is not running"
+                        : [
+                            DRIVE_MODE_DETAIL[driveMode.mode],
+                            guardStatus(driveMode.message).detail,
+                            armed ? "This browser's joystick is on." : "This browser's joystick is off.",
+                        ].join("\n")}>
+                    {driveMode.mode === DRIVE_MODE.MANUAL ? <Hand size={14} />
+                        : driveMode.mode === DRIVE_MODE.AUTOMATIC ? <Bot size={14} />
+                            : driveMode.mode === DRIVE_MODE.ASSISTED ? <ShieldCheck size={14} /> : <Gamepad2 size={14} />}
+                    {driveMode.mode === null ? "MODE ?" : DRIVE_MODE_LABEL[driveMode.mode].toUpperCase()}
                 </span>
             </div>
 

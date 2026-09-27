@@ -17,27 +17,39 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
 
 ## Features
 
-- **Neutral / Manual.** The page starts in Neutral and publishes nothing. **Manual**
-  publishes `geometry_msgs/TwistStamped` on `<ns>/teleop_driver_interface_cmd_vel_stamped` at 10 Hz
-  while the stick is deflected. Releasing the stick sends a short burst of zeros (~300 ms, so one
-  lost message cannot leave the rover moving) and then nothing, as the RC teleop does, so an idle
-  Manual does not hold the base: Nav 2 can drive again after twist_mux's timeout.
-  The UI has its own twist_mux input, priority 8: it beats Nav 2 (5), while the RC link (110)
-  and Foxglove (100) override it. Switching to Manual still cancels a running mission, and Go To
-  is disabled in Manual.
+- **Driving modes.** The rover has three, owned by `rover_drive_mode` (rover_orchestrator) and
+  shared by every browser: the UI reads the latched `<ns>/drive_mode` (`rover_msgs/DriveMode`)
+  and asks for a change with `<ns>/set_drive_mode`. The selector moves only when the rover says
+  so, and a refused request (Automatic without the mission manager) shows the reason.
+  - **Manual:** the joystick drives the rover directly, with no obstacle check.
+  - **Assisted:** the joystick goes through a lidar collision monitor on the rover, which slows
+    the rover down and then stops it in front of obstacles. The zones follow the stick, so you
+    can still back away or turn. With no lidar data it blocks all motion.
+  - **Automatic:** Nav 2 drives (Go to, places, workflows). Moving the joystick takes over: the
+    rover switches to Assisted and cancels the mission. Go to is disabled in the other modes.
+  A guard chip shows what the lidar is doing: Path clear, Slowing, Obstacle - stopped, No lidar,
+  or No obstacle check (Manual). The RC transmitter and Foxglove bypass the modes.
+- **Joystick on / off.** Per browser, starts off and publishes nothing. When on, the page
+  publishes `geometry_msgs/TwistStamped` on `<ns>/teleop_web_cmd_vel_stamped` at 10 Hz while the
+  stick is deflected; `rover_drive_mode` routes it by mode onto twist_mux's web-teleop input
+  (`teleop_driver_interface_cmd_vel_stamped`, priority 8: it beats Nav 2 (5), while the RC link
+  (110) and Foxglove (100) override it). Releasing the stick sends a short burst of zeros
+  (~300 ms, so one lost message cannot leave the rover moving) and then nothing, as the RC
+  teleop does.
 - **Stale commands are dropped on the rover.** `rover_command_freshness_node` (rover_twist_mux)
   passes the UI's commands to twist_mux only while they are fresh, so commands held in the
   websocket through a Wi-Fi stall are not replayed. It works from the `header.stamp` this UI
   sets, and tolerates the browser's clock being offset from the rover's.
 - **Deadman.** Publishing stops when:
-  - the page is hidden or unfocused, or the bridge connection drops;
+  - the page is hidden or unfocused, or the bridge connection drops (hidden or disconnected
+    also turns the joystick off);
   - twist_mux's 0.3 s timeout on this input then stops the rover.
 - **Controls.**
   - On-screen joystick, or a gamepad while **L1/LB** is held.
-  - A compact **map drive widget** (Neutral/Manual, joystick, speed) at the lower right of
+  - A compact **map drive widget** (mode, joystick on/off, joystick, speed) at the lower right of
     the map on the Navigate and Facility tabs. It opens by itself when mapping starts, so a
     facility map can be recorded without the RC transmitter.
-  - Manual driving keeps publishing whichever tab is open; the loop lives above the tabs.
+  - The joystick keeps publishing whichever tab is open; the loop lives above the tabs.
   - Speed presets 20/50/80/100 % of the configured maximum.
   - Expo curve per axis (`expoLinear` 0.3, `expoAngular` 0.5): small stick moves give much
     less speed (30 % turn stick → 16 %), full stick is still full speed. 0 = linear.
@@ -51,7 +63,7 @@ browser ──http/ws :5000──► nginx (rover-a1-drive-interface) ──ws�
   - the rover and its places.
   Tools:
   - **Set pose** (AMCL `initialpose`);
-  - **Go to**, which calls rover_mission_manager's `set_mission`;
+  - **Go to**, which calls rover_mission_manager's `set_mission` (Automatic mode only);
   - **Add place**;
   - **Stop**.
   Rotation:

@@ -1,8 +1,9 @@
 import { ArrowDown, ArrowUp, ListOrdered, MapPinned, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { useApp } from "../AppContext";
+import { useDriveMode } from "../hooks/useDriveMode";
 import type { IndoorNav } from "../hooks/useIndoorNav";
+import { goToBlockedReason } from "../lib/driveMode";
 import type { Pose2D } from "../lib/geometry";
 import { LOCALIZATION_MODE, type PlaceMsg } from "../lib/rosTypes";
 import { moveStep, removeStep, resolveWorkflow, workflowLabel } from "../lib/workflow";
@@ -31,7 +32,8 @@ export const PlacesPanel = ({ indoor, robotPose, onGo, highlighted, setHighlight
     highlighted: string | null;
     setHighlighted: (id: string | null) => void;
 }) => {
-    const { driveMode } = useApp();
+    const driveMode = useDriveMode();
+    const goToBlocked = goToBlockedReason(driveMode.mode);
     const localized = indoor.state?.mode === LOCALIZATION_MODE.LOCALIZATION;
     const mapName = indoor.state?.map_name ?? "";
     const [error, setError] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export const PlacesPanel = ({ indoor, robotPose, onGo, highlighted, setHighlight
     }
 
     const steps = resolveWorkflow(workflow, indoor.places);
-    const canDrive = localized && driveMode === "neutral" && !busy;
+    const canDrive = localized && goToBlocked === null && !busy;
 
     return (
         <section className="card">
@@ -180,7 +182,7 @@ export const PlacesPanel = ({ indoor, robotPose, onGo, highlighted, setHighlight
                 </button>
                 <button className="btn" disabled={workflow.length === 0} onClick={() => setWorkflow([])}>Clear</button>
             </div>
-            {driveMode === "manual" && <p className="hint">Switch to Neutral to send the rover somewhere.</p>}
+            {goToBlocked && <p className="hint">{goToBlocked}.</p>}
             {error && <p className="hint error-text">{error}</p>}
         </section>
     );

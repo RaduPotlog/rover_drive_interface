@@ -1,8 +1,9 @@
 import { Navigation, Square } from "lucide-react";
 import { useState } from "react";
 
-import { useApp } from "../AppContext";
+import { useDriveMode } from "../hooks/useDriveMode";
 import { useNow } from "../hooks/useTopic";
+import { goToBlockedReason } from "../lib/driveMode";
 import type { Pose2D } from "../lib/geometry";
 import { MISSION_STATE, MISSION_STATE_LABEL, type MissionState } from "../lib/rosTypes";
 import type { Level } from "../lib/status";
@@ -28,7 +29,8 @@ export const NavPanel = ({ mission, robotPose, onStop, stopError }: {
     onStop: () => void;
     stopError: string | null;
 }) => {
-    const { driveMode } = useApp();
+    const driveMode = useDriveMode();
+    const blocked = goToBlockedReason(driveMode.mode);
     useNow(1000);
     const [showDetail, setShowDetail] = useState(false);
     const active = isActive(mission);
@@ -54,13 +56,16 @@ export const NavPanel = ({ mission, robotPose, onStop, stopError }: {
             {mission?.state === MISSION_STATE.FAILED && mission.message && (
                 <p className="hint error-text">{mission.message}</p>
             )}
+            {mission?.state === MISSION_STATE.CANCELLED && mission.message && (
+                <p className="hint warn-text">Cancelled: {mission.message}.</p>
+            )}
             <button className="btn btn-danger btn-wide" disabled={!active} onClick={onStop}>
                 <Square size={16} fill="currentColor" />Stop
             </button>
             {stopError && <p className="hint error-text">{stopError}</p>}
             <p className="hint">
-                {driveMode === "manual"
-                    ? "Manual driving is on - switch to Neutral to send the rover somewhere."
+                {blocked
+                    ? `${blocked}.`
                     : "Pick “Go to” on the map, click the destination and drag the final heading."}
             </p>
             <button className="linklike" onClick={() => setShowDetail(!showDetail)}>

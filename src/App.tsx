@@ -1,7 +1,7 @@
 import { Building2, Gamepad2, Navigation } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { AppContext, type DriveMode, useApp } from "./AppContext";
+import { AppContext, useApp } from "./AppContext";
 import type { AppConfig } from "./config";
 import { DrivePanel } from "./components/DrivePanel";
 import { EStopPanel } from "./components/EStopPanel";
@@ -9,16 +9,18 @@ import { FacilityPanel } from "./components/FacilityPanel";
 import { MapDriveWidget } from "./components/MapDriveWidget";
 import { MapToolbar } from "./components/MapToolbar";
 import { type MapTool, MapView } from "./components/MapView";
-import { isActive, NavPanel } from "./components/NavPanel";
+import { NavPanel } from "./components/NavPanel";
 import { PendingBar } from "./components/PendingBar";
 import { PlacesPanel } from "./components/PlacesPanel";
 import { type LocalizationStatus, TopBar } from "./components/TopBar";
 import { DiagnosticsProvider } from "./hooks/useDiagnostics";
+import { DriveModeProvider, useDriveMode } from "./hooks/useDriveMode";
 import { useIndoorNav } from "./hooks/useIndoorNav";
 import { useLocalizationQuality } from "./hooks/useLocalizationQuality";
 import { useNavigation } from "./hooks/useNavigation";
 import { useSafetySummary } from "./hooks/useSafety";
 import { TeleopProvider } from "./hooks/useTeleop";
+import { goToBlockedReason } from "./lib/driveMode";
 import type { Pose2D } from "./lib/geometry";
 import { type MapSummary, sameMapSummary } from "./lib/occupancyGrid";
 import { nsFrame } from "./lib/namespace";
@@ -43,7 +45,8 @@ const loadFrameMode = (): ViewFrameMode => {
 };
 
 const Workspace = () => {
-    const { config, driveMode, setDriveMode } = useApp();
+    const { config } = useApp();
+    const driveMode = useDriveMode();
     const { connected } = useRos();
     const nav = useNavigation();
     const indoor = useIndoorNav();
@@ -98,7 +101,9 @@ const Workspace = () => {
     if (!connected) {
         disabledTools.setPose = disabledTools.goTo = disabledTools.place = "Not connected";
     }
-    if (driveMode === "manual") disabledTools.goTo = "Switch to Neutral first - manual driving owns the base";
+    // Only AUTOMATIC lets Nav 2 drive; the mission manager would refuse the goal anyway.
+    const goToBlocked = goToBlockedReason(driveMode.mode);
+    if (goToBlocked) disabledTools.goTo = disabledTools.goTo ?? goToBlocked;
     if (odomView) {
         disabledTools.setPose = disabledTools.setPose ?? "Re-localizing needs the map frame - the view is on odometry";
         disabledTools.place = disabledTools.place ?? "Places are stored in the map frame - the view is on odometry";
@@ -190,18 +195,12 @@ const Workspace = () => {
         }
     };
 
-    // Manual and autonomous driving are exclusive (as in IndoorNav): taking manual control
-    // cancels the mission instead of letting Nav 2 fight the operator and time out.
-    const guardedSetDriveMode = useCallback((mode: DriveMode) => {
-        if (mode === "manual" && isActive(nav.mission)) {
-            nav.stop().catch((e) => setStopError(errorText(e)));
-        }
-        setDriveMode(mode);
-    }, [nav, setDriveMode]);
-
+    // Manual and autonomous driving are exclusive (as in IndoorNav), but the rover enforces it:
+    // leaving Automatic, or moving the joystick in it, makes rover_drive_mode switch modes and
+    // rover_mission_manager cancel the mission. Nothing to do here.
     return (
-        <AppContext.Provider value={{ config, driveMode, setDriveMode: guardedSetDriveMode }}>
-            {/* Above the tabs, so manual driving keeps publishing whichever tab is open. */}
+        <>
+            {/* Above the tabs, so the joystick keeps publishing whichever tab is open. */}
             <TeleopProvider>
                 <div className="app">
                     <TopBar localization={localization} safety={safety} />
@@ -290,21 +289,23 @@ const Workspace = () => {
                     </main>
                 </div>
             </TeleopProvider>
-        </AppContext.Provider>
+        </>
     );
 };
 
 export const App = ({ config }: { config: AppConfig }) => {
-    const [driveMode, setDriveMode] = useState<DriveMode>("neutral");
-    // Raw drive mode here; Workspace re-provides it with the mission-cancelling guard.
-    const state = useMemo(() => ({ config, driveMode, setDriveMode }), [config, driveMode]);
+    // This browser's joystick starts off: the operator arms it on purpose.
+    const [armed, setArmed] = useState(false);
+    const state = useMemo(() => ({ config, armed, setArmed }), [config, armed]);
     return (
         <RosProvider>
             <AppContext.Provider value={state}>
-                {/* Above Workspace so diagnostics history keeps filling while the popup is closed. */}
-                <DiagnosticsProvider>
-                    <Workspace />
-                </DiagnosticsProvider>
+                <DriveModeProvider>
+                    {/* Above Workspace so diagnostics history keeps filling while the popup is closed. */}
+                    <DiagnosticsProvider>
+                        <Workspace />
+                    </DiagnosticsProvider>
+                </DriveModeProvider>
             </AppContext.Provider>
         </RosProvider>
     );

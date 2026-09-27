@@ -105,16 +105,16 @@ export const stickToTwist = (
 };
 
 /**
- * Whether the drive loop may publish at all. Manual mode owns the base only while the page
- * is visible and focused and the bridge is connected; anything else is the deadman letting
+ * Whether the drive loop may publish at all. The armed joystick owns its input only while the
+ * page is visible and focused and the bridge is connected; anything else is the deadman letting
  * go, and twist_mux's 0.3 s timeout on this input then stops the rover.
  */
 export const mayPublish = (state: {
-    manual: boolean;
+    armed: boolean;
     connected: boolean;
     visible: boolean;
     focused: boolean;
-}): boolean => state.manual && state.connected && state.visible && state.focused;
+}): boolean => state.armed && state.connected && state.visible && state.focused;
 
 export const isZeroTwist = (t: Twist2D): boolean => t.linear === 0 && t.angular === 0;
 
