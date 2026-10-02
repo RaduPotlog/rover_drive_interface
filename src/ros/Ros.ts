@@ -25,6 +25,17 @@ import type { IWebSocket } from '@foxglove/ws-protocol';
 
 import { type EventTypes, Impl } from './Impl';
 
+/**
+ * No reply within the caller's timeout. Not proof the call failed: on a slow link the reply
+ * can still be queued behind topic data while the ROS side has already done the work.
+ */
+export class ServiceTimeoutError extends Error {
+    constructor(service: string, timeoutMs: number) {
+        super(`${service} did not answer within ${timeoutMs} ms`);
+        this.name = 'ServiceTimeoutError';
+    }
+}
+
 export class Ros {
     #rosImpl: Impl | undefined;
 
@@ -104,8 +115,8 @@ export class Ros {
     }
 
     /**
-     * Call a service through the bridge. Rejects when not connected, or when the
-     * service is not advertised / does not answer within timeoutMs.
+     * Call a service through the bridge. Rejects when not connected, or with a
+     * ServiceTimeoutError when the service is not advertised / does not answer within timeoutMs.
      */
     callService<Request, Response>(service: string, request: Request, timeoutMs = 5000) {
         const impl = this.rosImpl;
@@ -114,7 +125,7 @@ export class Ros {
         }
         let timer: ReturnType<typeof setTimeout> | undefined;
         const timeout = new Promise<never>((_resolve, reject) => {
-            timer = setTimeout(() => reject(new Error(`${service} did not answer within ${timeoutMs} ms`)), timeoutMs);
+            timer = setTimeout(() => reject(new ServiceTimeoutError(service, timeoutMs)), timeoutMs);
         });
         return Promise.race([impl.sendServiceRequest<Request, Response>(service, request), timeout])
                 .finally(() => clearTimeout(timer));

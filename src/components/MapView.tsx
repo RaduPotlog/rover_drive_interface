@@ -125,12 +125,14 @@ export interface MapViewProps {
     /** The frame actually drawn in (goals and poses drawn on the canvas are in it). */
     onViewFrame?: (frame: ViewFrame) => void;
     onScanMatch?: (match: ScanMatch | null) => void;
+    /** The link is too slow: leave the scan and the costmap overlay unsubscribed. */
+    streamsPaused?: boolean;
 }
 
 export const MapView = ({
     tool, onPoseDrawn, pending, markers, onMarkerClick, showCostmap, follow, headingUp = false, rotationKey = "default",
     onRobotPose, onMapFrame, onMapInfo, scanMatchEnabled = false, mapping = false, onScanMatch, frameMode = "auto",
-    onViewFrame,
+    onViewFrame, streamsPaused = false,
 }: MapViewProps) => {
     const { config } = useApp();
     const ns = config.namespace;
@@ -181,18 +183,27 @@ export const MapView = ({
         onMapInfo?.(summarizeMap(m));
         markDirty();
     });
+    // On a link that cannot keep up (see lib/link.ts), the scan (~30 KB/s) and the costmap
+    // overlay (a 528 KB grid every 5 s) are dropped until it recovers, so service replies and
+    // the map get through.
+    const costmapOn = showCostmap && !streamsPaused;
     useSubscriptionRef<OccupancyGrid>(
-        showCostmap ? nsName(ns, "global_costmap/costmap") : null, "nav_msgs/msg/OccupancyGrid", (m) => {
+        costmapOn ? nsName(ns, "global_costmap/costmap") : null, "nav_msgs/msg/OccupancyGrid", (m) => {
             costLayer.current = toLayer(m, "costmap");
             markDirty();
         });
-    useSubscriptionRef<LaserScan>(nsName(ns, "scan"), "sensor_msgs/msg/LaserScan", (m) => { scan.current = m; markDirty() });
+    useSubscriptionRef<LaserScan>(
+        streamsPaused ? null : nsName(ns, "scan"), "sensor_msgs/msg/LaserScan", (m) => { scan.current = m; markDirty() });
     useSubscriptionRef<Path>(nsName(ns, "plan"), "nav_msgs/msg/Path", (m) => { plan.current = m; markDirty() });
 
     useEffect(() => {
-        if (!showCostmap) costLayer.current = null;
+        if (!costmapOn) costLayer.current = null;
         markDirty();
-    }, [showCostmap]);
+    }, [costmapOn]);
+    useEffect(() => {
+        if (streamsPaused) scan.current = null;
+        markDirty();
+    }, [streamsPaused]);
     useEffect(markDirty, [pending, markers, tool, frameMode]);
 
     // Scan-to-map match for the localization-quality indicator, twice a second.
@@ -741,6 +752,11 @@ export const MapView = ({
                     <span className="map-scale-bar" style={{ width: `${scaleBar.px}px` }} />
                     <span>{formatDistance(scaleBar.meters)}</span>
                 </div>
+                {streamsPaused && (
+                    <div className="map-legend" title="Service replies were not getting through in time. The lidar scan and the costmap overlay are paused until replies come back on time for a while (10 s, longer if the link keeps relapsing).">
+                        <span><span className="legend-dot" style={{ background: "#f5b400" }} />Slow link - scan{showCostmap ? " and costmap" : ""} paused</span>
+                    </div>
+                )}
                 {viewKind === "odom" && (
                     <div className="map-legend map-odom-badge" title="The rover is drawn from wheel/IMU odometry only (no map -> odom transform). Position drifts over distance; the grid is 1 m.">
                         <span><span className="legend-dot" style={{ background: "#f5b400" }} />Odom frame - no map localization, drift accumulates · grid 1 m</span>

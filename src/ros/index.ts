@@ -20,5 +20,5 @@
  * along with Cockpit; If not, see <http://www.gnu.org/licenses/>.
  */
 
-export { Ros } from './Ros';
+export { Ros, ServiceTimeoutError } from './Ros';
 export { Topic, Message } from './Topic';

@@ -20,7 +20,7 @@ import { useApp } from "../AppContext";
 import { useAuxIo } from "../hooks/useAuxIo";
 import { useDiagnostics } from "../hooks/useDiagnostics";
 import { useDriveMode } from "../hooks/useDriveMode";
-import { useLatency } from "../hooks/useLatency";
+import { useLink } from "../hooks/useLink";
 import { useNow, useTopic } from "../hooks/useTopic";
 import { DRIVE_MODE, DRIVE_MODE_DETAIL, DRIVE_MODE_LABEL, guardStatus } from "../lib/driveMode";
 import type { Quality } from "../lib/locQuality";
@@ -93,7 +93,8 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
     const { connected } = useRos();
     const ns = config.namespace;
     const now = useNow(1000);
-    const latency = useLatency();
+    const link = useLink();
+    const latency = link.latency;
     const diag = useDiagnostics();
     const [diagOpen, setDiagOpen] = useState(false);
     const diagPill = useRef<HTMLButtonElement>(null);
@@ -115,7 +116,7 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
         : "unknown";
     const diagText: Record<Level, string> = { ok: "OK", warn: "Warning", error: "Error", stale: "Stale", unknown: "—" };
 
-    const linkLevel: Level = !connected ? "error" : latency === null ? "unknown" : latency > 400 ? "warn" : "ok";
+    const linkLevel: Level = !connected ? "error" : link.slow ? "warn" : latency === null ? "unknown" : latency > 400 ? "warn" : "ok";
     const q = localization.quality;
 
     return (
@@ -179,8 +180,12 @@ export const TopBar = ({ localization, safety: safetySummary }: { localization: 
                     level={linkLevel}
                     icon={connected ? <Wifi size={ICON} /> : <WifiOff size={ICON} />}
                     label="Link"
-                    value={!connected ? "Offline" : latency === null ? "—" : `${latency} ms`}
-                    title="Round trip to the rover through foxglove_bridge"
+                    value={!connected ? "Offline" : link.slow ? "Slow" : latency === null ? "—" : `${latency} ms`}
+                    title={[
+                        "Round trip to the rover through foxglove_bridge",
+                        link.slow ? "Replies are not getting through in time: the link cannot keep up with the map data." : "",
+                        link.paused ? "Scan and costmap overlay paused to free the link." : "",
+                    ].filter(Boolean).join("\n")}
                 />
             </div>
             {/* On every tab, outside the scrolling strip: a stop must never be one tab away. */}

@@ -16,6 +16,7 @@ import { type LocalizationStatus, TopBar } from "./components/TopBar";
 import { DiagnosticsProvider } from "./hooks/useDiagnostics";
 import { DriveModeProvider, useDriveMode } from "./hooks/useDriveMode";
 import { useIndoorNav } from "./hooks/useIndoorNav";
+import { LinkProvider, useLink } from "./hooks/useLink";
 import { useLocalizationQuality } from "./hooks/useLocalizationQuality";
 import { useNavigation } from "./hooks/useNavigation";
 import { useSafetySummary } from "./hooks/useSafety";
@@ -51,6 +52,7 @@ const Workspace = () => {
     const nav = useNavigation();
     const indoor = useIndoorNav();
     const safety = useSafetySummary();
+    const link = useLink();
     const [highlighted, setHighlighted] = useState<string | null>(null);
     // The URL hash selects the tab (#drive, #navigate, #facility), so a tab can be bookmarked.
     const [tab, setTabState] = useState<Tab>(() => {
@@ -224,6 +226,7 @@ const Workspace = () => {
                                 onScanMatch={onScanMatch}
                                 frameMode={frameMode}
                                 onViewFrame={setViewFrame}
+                                streamsPaused={link.paused}
                             />
                             <MapToolbar
                                 tool={tool}
@@ -299,14 +302,16 @@ export const App = ({ config }: { config: AppConfig }) => {
     const state = useMemo(() => ({ config, armed, setArmed }), [config, armed]);
     return (
         <RosProvider>
-            <AppContext.Provider value={state}>
-                <DriveModeProvider>
-                    {/* Above Workspace so diagnostics history keeps filling while the popup is closed. */}
-                    <DiagnosticsProvider>
-                        <Workspace />
-                    </DiagnosticsProvider>
-                </DriveModeProvider>
-            </AppContext.Provider>
+            <LinkProvider>
+                <AppContext.Provider value={state}>
+                    <DriveModeProvider>
+                        {/* Above Workspace so diagnostics history keeps filling while the popup is closed. */}
+                        <DiagnosticsProvider>
+                            <Workspace />
+                        </DiagnosticsProvider>
+                    </DriveModeProvider>
+                </AppContext.Provider>
+            </LinkProvider>
         </RosProvider>
     );
 };
