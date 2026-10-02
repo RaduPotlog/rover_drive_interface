@@ -148,7 +148,7 @@ from `ROVER_NAMESPACE` and `ROVER_DRIVE_*`.
 src/
 ├── ros/          # vendored foxglove_bridge client (LGPL-2.1, see src/ros/NOTICE.md)
 ├── lib/          # pure logic, unit tested: geometry, tf, teleop, occupancy grid, status
-├── hooks/        # useTopic, useServiceCall, useLatency, usePageActive
+├── hooks/        # useTopic, useServiceCall, useLink, usePageActive
 └── components/   # TopBar, DrivePanel, Joystick, EStopPanel, …
 test/             # vitest
 ```
